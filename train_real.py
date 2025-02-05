@@ -27,7 +27,6 @@ def train_Real_Robot(cfg: DictConfig):
     force_encoder = cfg.model_config.force_encoder
     cross_attn = cfg.model_config.cross_attn
     hybrid = cfg.model_config.hybrid
-    crop = cfg.model_config.crop
 
     if force_encode:
         cross_attn = False
@@ -43,8 +42,7 @@ def train_Real_Robot(cfg: DictConfig):
                                     force_encode=force_encode,
                                     force_encoder=force_encoder,
                                     cross_attn=cross_attn,
-                                    hybrid = hybrid,
-                                    crop = crop)
+                                    hybrid = hybrid)
     data_name = diffusion.data_name
 
     device = torch.device('cuda')
@@ -62,7 +60,7 @@ def train_Real_Robot(cfg: DictConfig):
     ema = EMAModel(
         parameters=diffusion.nets.parameters(),
         power=0.75)
-    checkpoint_dir = "/home/jeon/jeon_ws/diffusion_policy/src/diffusion_cam/checkpoints"
+    checkpoint_dir = "DP_cable_disconnection/checkpoints"
     # To continue t raining load and set the start epoch
     if continue_training:
         start_epoch = 1500
@@ -252,7 +250,7 @@ def train_Real_Robot(cfg: DictConfig):
             if epoch_idx > 950:
                 if (epoch_idx + 1) % 200 == 0 or (epoch_idx + 1) == end_epoch:
                     # Save only the state_dict of the model, including relevant submodules
-                    torch.save(diffusion.nets.state_dict(),  os.path.join(checkpoint_dir, f'{cfg.name}_{data_name}_{epoch_idx+1}_crop98_noaug_double.pth'))
+                    torch.save(diffusion.nets.state_dict(),  os.path.join(checkpoint_dir, f'{cfg.name}_{data_name}_{epoch_idx+1}.pth'))
     # Plot the loss after training is complete
     plt.figure(figsize=(10, 6))
     plt.plot(range(1, end_epoch + 1), epoch_losses, marker='o', label='Training Loss')

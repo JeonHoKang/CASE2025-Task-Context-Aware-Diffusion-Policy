@@ -482,7 +482,7 @@ def get_filename(input_string):
         return ""
 
 
-dataset_path = ""
+dataset_path = "DP_cable_disconnection/wire_47.zarr.zip"
 
 #@markdown ### **Network Demo**
 class DiffusionPolicy_Real:     
