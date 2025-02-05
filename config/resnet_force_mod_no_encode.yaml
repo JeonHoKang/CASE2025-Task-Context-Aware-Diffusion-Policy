@@ -1,0 +1,18 @@
+# resnet+delta_force_mod_single_veiw_force_encode.yaml
+defaults:
+  - _self_
+
+name:  resnet_force_mod_no_encode_hybrid
+
+model_config:
+  continue_training: False
+  start_epoch: 0
+  end_epoch: 1500
+  encoder: "resnet"
+  action_def: "delta"
+  force_mod: True
+  single_view: True
+  force_encode: False
+  force_encoder: "Linear"
+  cross_attn: False
+  hybrid: False
