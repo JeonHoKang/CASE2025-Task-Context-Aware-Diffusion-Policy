@@ -7,6 +7,7 @@ from rclpy.action import ActionClient
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 from control_msgs.action import FollowJointTrajectory
 import time
+import subprocess
 class KukaMotionPlanning(Node):
     def __init__(self, current_step):
         super().__init__('kuka_motion_planning')
@@ -22,7 +23,7 @@ class KukaMotionPlanning(Node):
         point = JointTrajectoryPoint()
         point.positions = list(joint_trajectories.position)
         point.time_from_start.sec = 0  # Set the seconds part to 0
-        point.time_from_start.nanosec = int(0.5 * 1e9)  # Set the nanoseconds part to 750,000,000
+        point.time_from_start.nanosec = int(0.6 * 1e9)  # Set the nanoseconds part to 750,000,000
 
         trajectory_msg.points.append(point)
         goal_msg.trajectory = trajectory_msg
@@ -41,6 +42,21 @@ class KukaMotionPlanning(Node):
         get_result_future = goal_handle.get_result_async()
         rclpy.spin_until_future_complete(self, get_result_future)
         result = get_result_future.result().result
+
+    def send_gripper_command(self, position, max_effort):
+        command = (
+            f'ros2 action send_goal '
+            f'gripper/robotiq_gripper_controller/gripper_cmd '
+            f'control_msgs/action/GripperCommand '
+            f'"{{command: {{position: {position}, max_effort: {max_effort}}}}}"'
+        )
+        result = subprocess.run(command, shell=True, capture_output=False, text=True)
+        if result.returncode == 0:
+            print("Command executed successfully.")
+            print(result.stdout)
+        else:
+            print("Error executing command.")
+            print(result.stderr)
 
     def feedback_callback(self, feedback_msg):
         feedback = feedback_msg.feedback

@@ -14,7 +14,7 @@ import hydra
 from omegaconf import DictConfig
 
 # Make sure Crop is all there
-@hydra.main(version_base=None, config_path="config", config_name="resnet_delta_with_force_single_view_force_MLP_crossattn_hybrid_crop")
+@hydra.main(version_base=None, config_path="config", config_name="resnet_force_mod_no_encode")
 def train_Real_Robot(cfg: DictConfig):
     continue_training=  cfg.model_config.continue_training
     start_epoch = cfg.model_config.start_epoch
@@ -60,11 +60,12 @@ def train_Real_Robot(cfg: DictConfig):
     ema = EMAModel(
         parameters=diffusion.nets.parameters(),
         power=0.75)
-    checkpoint_dir = "DP_cable_disconnection/checkpoints"
+    checkpoint_dir = "checkpoints"
     # To continue t raining load and set the start epoch
     if continue_training:
         start_epoch = 1500
         checkpoint_path = os.path.join(checkpoint_dir, f'checkpoint_{start_epoch}.pth')  # Replace with the correct path
+        print(checkpoint_path)
         # Load the saved state_dict into the model
         checkpoint = torch.load(checkpoint_path)
         diffusion.nets.load_state_dict(checkpoint)  # Load model state
@@ -74,7 +75,7 @@ def train_Real_Robot(cfg: DictConfig):
     # Note that EMA parametesr are not optimized
     optimizer = torch.optim.AdamW(
         params=diffusion.nets.parameters(),
-        lr=3e-4, weight_decay=1e-6)
+        lr=1e-4, weight_decay=1e-6)
 
     # Cosine LR schedule with linear warmup
     lr_scheduler = get_scheduler(
@@ -87,7 +88,7 @@ def train_Real_Robot(cfg: DictConfig):
     epoch_losses = []
 
     with tqdm(range(start_epoch, end_epoch), desc='Epoch') as tglobal:
-        # epoch loopqqqqqqqqqqqqq
+        # epoch loop
         for epoch_idx in tglobal:
             epoch_loss = list()
             ### THis is for seperately training augmented and non augmented data
@@ -135,7 +136,7 @@ def train_Real_Robot(cfg: DictConfig):
                     #     axes[j].axis('off')  # Hide the axes
                     #     # Show the plot
                     # plt.show()  
-                    ### For double realsense config only
+                    # For double realsense config only
                     # for j in range(2):
                     #     # Convert the 3x96x96 tensor to a 96x96x3 image (for display purposes)
                     #     # img2 = imdata2[j].transpose(1, 2, 0)
@@ -143,8 +144,7 @@ def train_Real_Robot(cfg: DictConfig):
                     #     # Plot the image on the corresponding subplot
                     #     axes[j].imshow(img2)
                     #     axes[j].axis('off')  # Hide the axes
-                    #     # Show the plot
-                    # plt.show()  
+                        # Show the plot
 
                     if encoder == "resnet":
                         image_input = nimage.flatten(end_dim=1)
@@ -247,10 +247,10 @@ def train_Real_Robot(cfg: DictConfig):
             tglobal.set_postfix(loss=avg_loss)
             
             # Save checkpoint every 10 epochs or at the end of training
-            if epoch_idx > 950:
-                if (epoch_idx + 1) % 200 == 0 or (epoch_idx + 1) == end_epoch:
+            if epoch_idx >= 900:
+                if (epoch_idx + 1) % 20 == 0 or (epoch_idx + 1) == end_epoch:
                     # Save only the state_dict of the model, including relevant submodules
-                    torch.save(diffusion.nets.state_dict(),  os.path.join(checkpoint_dir, f'{cfg.name}_{data_name}_{epoch_idx+1}.pth'))
+                    torch.save(diffusion.nets.state_dict(),  os.path.join(checkpoint_dir, f'{cfg.name}_{data_name}_{epoch_idx+1}_DDIM.pth'))
     # Plot the loss after training is complete
     plt.figure(figsize=(10, 6))
     plt.plot(range(1, end_epoch + 1), epoch_losses, marker='o', label='Training Loss')

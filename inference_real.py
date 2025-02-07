@@ -1,18 +1,10 @@
 from typing import Tuple, Sequence, Dict, Union, Optional, Callable
 import numpy as np
-import math
 import torch
 import torch.nn as nn
-import torchvision
 import collections
-import zarr
-from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
-from diffusers.training_utils import EMAModel
-from diffusers.optimization import get_scheduler
 from tqdm.auto import tqdm
-import gdown
 import os
-from skvideo.io import vwrite
 from real_robot_network import DiffusionPolicy_Real
 from data_util import data_utils
 import cv2
@@ -23,13 +15,11 @@ from scipy.spatial.transform import Rotation as R
 import time
 import rclpy
 from rclpy.node import Node
-from rclpy.action import ActionClient
 from sensor_msgs.msg import JointState
 from moveit_msgs.srv import GetPositionFK, GetPositionIK
 from moveit_msgs.msg import RobotState, MoveItErrorCodes, JointConstraint, Constraints
 from geometry_msgs.msg import Pose, WrenchStamped
-from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
-from control_msgs.action import FollowJointTrajectory
+
 # from data_collection.submodules.wait_for_message import wait_for_message
 import matplotlib.pyplot as plt
 #@markdown ### **Loading Pretrained Checkpoint**
@@ -48,6 +38,7 @@ from omegaconf import DictConfig
 from data_util import center_crop
 import csv
 from datetime import datetime
+from robotiq_p import ControlRobotiq
 
 def wait_for_message(
     msg_type,
@@ -124,6 +115,8 @@ class EndEffectorPoseNode(Node):
             self.get_logger().error("IK service not available.")
             exit(1)
 
+
+
     def force_torque_callback(self, msg):
         self.force_torque_data = msg.wrench
 
@@ -131,8 +124,11 @@ class EndEffectorPoseNode(Node):
         current_joint_state_set, current_joint_state = wait_for_message(
             JointState, self, self.joint_state_topic_, time_to_wait=1.0
         )
-        if not current_joint_state_set:
+        while not current_joint_state_set:
             self.get_logger().warn("Failed to get current joint state")
+            current_joint_state_set, current_joint_state = wait_for_message(
+                JointState, self, self.joint_state_topic_, time_to_wait=1.0
+            )
         else:
             current_robot_state = RobotState()
             current_robot_state.joint_state = current_joint_state
@@ -229,9 +225,9 @@ class EndEffectorPoseNode(Node):
         future = self.ik_client_.call_async(request)
 
         rclpy.spin_until_future_complete(self, future)
-        if future.result() is None:
+        while future.result() is None:
             self.get_logger().error("Failed to get IK solution")
-            return None
+            future = self.ik_client_.call_async(request)
 
         response = future.result()
         if response.error_code.val != MoveItErrorCodes.SUCCESS:
@@ -258,13 +254,11 @@ class EvaluateRealRobot:
                                         )
         # num_epochs = 100
         ema_nets = self.load_pretrained(diffusion)
-     
         step_idx = 0
         # device transfer
         device = torch.device('cuda')
         _ = diffusion.nets.to(device)
         # Initialize realsense camera
-        pipeline_A = rs.pipeline()
         pipeline_B = rs.pipeline()
         camera_context = rs.context()
         camera_devices = camera_context.query_devices()
@@ -273,6 +267,8 @@ class EvaluateRealRobot:
         self.cross_attn = cross_attn
         if not single_view:
             if len(camera_devices) < 2:
+                pipeline_A = rs.pipeline()
+
                 raise RuntimeError("Two cameras are required, but fewer were detected.")
                 # Initialize Camera A
                 serial_A = camera_devices[0].get_info(rs.camera_info.serial_number)
@@ -281,13 +277,16 @@ class EvaluateRealRobot:
                 config_A.enable_device(serial_A)
                 config_A.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
                 align_A = rs.align(rs.stream.color)
+                self.pipeline_A = pipeline_A
+                self.align_A = align_A
+                self.pipeline_A.start(config_A)
         else:
             if len(camera_devices) < 1:
                 raise RuntimeError("One camera required, but fewer were detected.")
 
 
         # Initialize Camera B
-        serial_B = camera_devices[1].get_info(rs.camera_info.serial_number)
+        serial_B = camera_devices[0].get_info(rs.camera_info.serial_number)
         # Configure Camera B
         config_B = rs.config()
         config_B.enable_device(serial_B)
@@ -317,10 +316,7 @@ class EvaluateRealRobot:
             self.camera_device = camera_devices
             self.align_B = align_B
             self.pipeline_B.start(config_B)
-            if not single_view:
-                self.pipeline_A = pipeline_A
-                self.align_A = align_A
-                self.pipeline_A.start(config_A)
+
 
         self.encoder = encoder
         self.action_def = action_def
@@ -328,13 +324,15 @@ class EvaluateRealRobot:
         self.force_mod = force_mod
         self.single_view = single_view
         self.hybrid = hybrid
+        self.robotiq_gripper = ControlRobotiq()
+
         obs = self.get_observation()
          # keep a queue of last 2 steps of observations
         obs_deque = collections.deque(
             [obs] * diffusion.obs_horizon, maxlen=diffusion.obs_horizon)
 
         self.obs_deque = obs_deque
-        
+
     def create_unique_csv_path(self):
         """Generate a unique CSV file path with a timestamp."""
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -358,6 +356,8 @@ class EvaluateRealRobot:
         with open(self.csv_file_path, mode='a', newline='') as csv_file:
             writer = csv.writer(csv_file)
             writer.writerow(force_torque_data)
+
+
 
     def get_observation(self):
         ### Get initial observation for the
@@ -393,13 +393,13 @@ class EvaluateRealRobot:
         agent_pos.astype(np.float64)
         force_torque_data = None
         if self.force_mod:
-            force_torque_data = [EE_Pose_Node.force_torque_data.force.x, EE_Pose_Node.force_torque_data.force.y, EE_Pose_Node.force_torque_data.force.z]
+            force_torque_data = [EE_Pose_Node.force_torque_data.force.x, EE_Pose_Node.force_torque_data.force.y, EE_Pose_Node.force_torque_data.force.z, EE_Pose_Node.force_torque_data.torque.x,  EE_Pose_Node.force_torque_data.torque.y, EE_Pose_Node.force_torque_data.torque.z]
             force_torque_data = np.asanyarray(force_torque_data)
             force_torque_data.astype(np.float32)
 
         if agent_pos is None:
             EE_Pose_Node.get_logger().error("Failed to get end effector pose")
-        #####
+        
         if single_view:
             frames_B = pipeline_B.wait_for_frames()
             aligned_frames_B = align_B.process(frames_B)
@@ -450,14 +450,16 @@ class EvaluateRealRobot:
         self.save_agent_pos_to_csv(force_torque_data)
         agent_position = agent_pos[:3]
         agent_rotation = agent_pos[3:]
+        # Gripper Position Query
+        gripper_pos = self.robotiq_gripper.get_gripper_current_pose()
         rot_m_agent = quat_to_rot_m(agent_rotation)
         rot_6d = mat_to_rot6d(rot_m_agent)
-        agent_pos_10d = np.hstack((agent_position, rot_6d))
+        agent_pos_10d = np.hstack((agent_position, rot_6d, gripper_pos))
         import matplotlib.pyplot as plt
         # plt.imshow(image_A_rgb)
         # plt.show()
-        plt.imshow(image_B_rgb)
-        plt.show()
+        # plt.imshow(image_B_rgb)
+        # plt.show()
         # Reshape to (C, H, W)
         image_B = np.transpose(image_B_rgb, (2, 0, 1))
         if not single_view:
@@ -494,9 +496,12 @@ class EvaluateRealRobot:
         EE_Pose_Node = EndEffectorPoseNode("exec")
         end_effector_pos = [float(value) for value in end_effector_pos]
         position = end_effector_pos[:3]
-        rot6d = end_effector_pos[3:]
+        rot6d = end_effector_pos[3:9]
         rot_m = rot6d_to_mat(np.array(rot6d))
         quaternion = quat_from_rot_m(rot_m)
+        kuka_execution = KukaMotionPlanning(steps)
+
+
         if self.action_def == "delta":
             current_pos = EE_Pose_Node.get_fk()
             np.array(quaternion)
@@ -532,9 +537,13 @@ class EvaluateRealRobot:
             # # Create a JointTrajectory message
             # goal_msg = FollowJointTrajectory.Goal()
             # trajectory_msg = JointTrajectory()
-            kuka_execution = KukaMotionPlanning(steps)
             kuka_execution.send_goal(joint_state)
-
+            current_gripper_pos = self.robotiq_gripper.get_gripper_current_pose()
+            if end_effector_pos[-1] < 0:
+                end_effector_pos[-1] = 0.0
+            delta_gripper = abs(current_gripper_pos - end_effector_pos[-1])
+            if delta_gripper > 0.1:
+                self.robotiq_gripper.send_gripper_command(float(end_effector_pos[-1]*1.2))
             # # trajectory_msg.joint_names = kuka_execution.joint_names
             # point = JointTrajectoryPoint()
             # point.positions = joint_state.position
@@ -560,7 +569,7 @@ class EvaluateRealRobot:
 
         load_pretrained = True
         if load_pretrained:
-            ckpt_path = "/home/lm-2023/jeon_team_ws/playback_pose/src/Diffusion_Policy_ICRA/checkpoints/resnet_delta_with_force_single_view_force_Linear_crossattn_hybrid_crop98_RAL_AAA+D_419.z_2600_crop98_18_with_aug.pth"
+            ckpt_path = "checkpoints/resnet_force_mod_no_encode_hybrid__1000.pth"
             #   if not os.path.isfile(ckpt_path):qq
             #       id = "1XKpfNSlwYMGqaF5CncoFaLKCDTWoLAHf1&confirm=tn"q
             #       gdown.download(id=id, output=ckpt_path, quiet=False)    
@@ -593,7 +602,7 @@ class EvaluateRealRobot:
         force_mod = self.force_mod
         force_encode = self.force_encode
         cross_attn = self.cross_attn
-        with open('/home/lm-2023/jeon_team_ws/playback_pose/src/Diffusion_Policy_ICRA/stats_RAL_AAA+D_419.z_resnet_delta_with_force.json', 'r') as f:
+        with open('/home/lm-2023/jeon_team_ws/lbr-stack/src/DP_cable_disconnection/stats__resnet_delta_with_force.json', 'r') as f:
             stats = json.load(f)
             if force_mod:
                 stats['agent_pos']['min'] = np.array(stats['agent_pos']['min'], dtype=np.float32)
@@ -630,7 +639,7 @@ class EvaluateRealRobot:
                 # print(agent_poses)
                 nagent_poses = data_utils.normalize_data(agent_poses[:,:3], stats=stats['agent_pos'])
                 if force_mod:
-                    normalized_force_data = data_utils.normalize_data(force_obs)
+                    normalized_force_data = data_utils.normalize_data(force_obs, stats=stats['forcetorque'])
                 # images are already normalized to [0,1]qqq
                 if not self.single_view:
                     nimages = images_A
@@ -780,12 +789,13 @@ class EvaluateRealRobot:
         plt.tight_layout()
         plt.show()
 
-@hydra.main(version_base=None, config_path="config", config_name="resnet_force_mod_no_encode_hybrid")
+@hydra.main(version_base=None, config_path="config", config_name="resnet_force_mod_no_encode")
 def main(cfg: DictConfig):
     # Max steps will dicate how long the inference duration is going to be so it is very important
     # Initialize RealSense pipelines for both cameras
     rclpy.init()
     try:  
+
         max_steps = 100
         # Evaluate Real Robot Environment
         print(f"inference on {cfg.name}")

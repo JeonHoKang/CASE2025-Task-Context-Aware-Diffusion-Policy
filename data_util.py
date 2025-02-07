@@ -226,7 +226,7 @@ class RealRobotDataSet(torch.utils.data.Dataset):
                  Transformer: bool = False,
                  force_mod: bool = False,
                  single_view: bool = False,
-                 augment: bool = False):
+                 augment: bool = True):
         
         # read from zarr dataset
         dataset_root = zarr.open(dataset_path, 'r')
@@ -270,7 +270,7 @@ class RealRobotDataSet(torch.utils.data.Dataset):
         for key, data in train_data.items():
             stats[key] = data_utils.get_data_stats(data[:,:3])
             normalized_position = data_utils.normalize_data(data[:,:3], stats[key])
-            normalized_orientation = data[:,3:9]
+            normalized_orientation = data[:,3:10]
             # normalized_orientation = data_utils.process_quaternion(data[:,3:7])
             normalized_train_data[key] = np.hstack((normalized_position, normalized_orientation))
             ## TODO: Add code that will handle - and + sign for quaternion
@@ -296,6 +296,7 @@ class RealRobotDataSet(torch.utils.data.Dataset):
         self.force_mod = force_mod
         self.single_view = single_view
         self.augment = augment
+        print(f"augment : {augment}")
         if self.augment:
             self.augmentation_transform = transforms.Compose([
                 transforms.RandomResizedCrop(size=(240, 320), scale=(0.5, 1.5)),

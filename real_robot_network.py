@@ -6,6 +6,7 @@ import math
 import torch
 import torch.nn as nn
 from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
+from diffusers.schedulers.scheduling_ddim import DDIMScheduler
 import os
 from data_util import RealRobotDataSet
 from train_utils import train_utils
@@ -482,7 +483,7 @@ def get_filename(input_string):
         return ""
 
 
-dataset_path = "DP_cable_disconnection/wire_47.zarr.zip"
+dataset_path = "wire_47.zarr.zip"
 
 #@markdown ### **Network Demo**
 class DiffusionPolicy_Real:     
@@ -507,7 +508,7 @@ class DiffusionPolicy_Real:
         #|o|o|                             observations: 2
         #| |a|a|a|a|a|a|a|a|               actions executed: 8
         #|p|p|p|p|p|p|p|p|p|p|p|p|p|p|p|p| actions predicted: 16
-        batch_size = 128
+        batch_size = 95
         Transformer_bool = None
         modality = "without_force"
         view = "dual_view"
@@ -587,6 +588,7 @@ class DiffusionPolicy_Real:
             obs_dim += 6
 
         data_name = get_filename(dataset_path)
+        self.scheduler = "DDIM"
 
         if train:
             # create dataset from file
@@ -600,7 +602,6 @@ class DiffusionPolicy_Real:
                 single_view=single_view,
                 augment = False)
             # save training data statistics (min, max) for each dim
-
 
 
             # create dataloader
@@ -756,18 +757,31 @@ class DiffusionPolicy_Real:
 
             
         # diffusion iteration
-        num_diffusion_iters = 100
+        num_diffusion_iters = 25
+        if self.scheduler == "DDIM":
+            print("DDIM scheduler")
+            noise_scheduler = DDIMScheduler(
+                num_train_timesteps=num_diffusion_iters,
+                # the choise of beta schedule has big impact on performance
+                # we found squared cosine works the best
+                beta_schedule='squaredcos_cap_v2',
+                # clip output to [-1,1] to improve stability
+                clip_sample=True,
+                # our network predicts noise (instead of denoised action)
+                prediction_type='epsilon'
+            )     
+        else:
 
-        noise_scheduler = DDPMScheduler(
-            num_train_timesteps=num_diffusion_iters,
-            # the choise of beta schedule has big impact on performance
-            # we found squared cosine works the best
-            beta_schedule='squaredcos_cap_v2',
-            # clip output to [-1,1] to improve stability
-            clip_sample=True,
-            # our network predicts noise (instead of denoised action)
-            prediction_type='epsilon'
-        )
+            noise_scheduler = DDPMScheduler(
+                num_train_timesteps=num_diffusion_iters,
+                # the choise of beta schedule has big impact on performance
+                # we found squared cosine works the best
+                beta_schedule='squaredcos_cap_v2',
+                # clip output to [-1,1] to improve stability
+                clip_sample=True,
+                # our network predicts noise (instead of denoised action)
+                prediction_type='epsilon'
+            )
 
         
         self.nets = nets
@@ -805,7 +819,7 @@ def test():
     # save training data statistics (min, max) for each dim
     stats = dataset.stats
 
-    batch_size = 10
+    batch_size = 124
     # create dataloader
     dataloader = torch.utils.data.DataLoader(
         dataset,
