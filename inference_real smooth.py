@@ -19,7 +19,6 @@ from sensor_msgs.msg import JointState
 from moveit_msgs.srv import GetPositionFK, GetPositionIK
 from moveit_msgs.msg import RobotState, MoveItErrorCodes, JointConstraint, Constraints
 from geometry_msgs.msg import Pose, WrenchStamped
-from scipy.spatial.distance import euclidean
 
 # from data_collection.submodules.wait_for_message import wait_for_message
 import matplotlib.pyplot as plt
@@ -31,7 +30,7 @@ from rclpy.impl.implementation_singleton import rclpy_implementation as _rclpy
 from rclpy.qos import QoSProfile
 from rclpy.signals import SignalHandlerGuardCondition
 from rclpy.utilities import timeout_sec_to_nsec
-from kuka_execute import KukaMotionPlanning
+from kuka_execute_copy import KukaMotionPlanning
 import cv2
 from rotation_utils import quat_from_rot_m, rot6d_to_mat, mat_to_rot6d, quat_to_rot_m, normalize
 import hydra
@@ -456,11 +455,11 @@ class EvaluateRealRobot:
         rot_m_agent = quat_to_rot_m(agent_rotation)
         rot_6d = mat_to_rot6d(rot_m_agent)
         agent_pos_10d = np.hstack((agent_position, rot_6d, gripper_pos))
-        import matplotlib.pyplot as plt
-        # plt.imshow(image_A_rgb)
+        # import matplotlib.pyplot as plt
+        # # plt.imshow(image_A_rgb)
+        # # plt.show()
+        # plt.imshow(image_B_rgb)
         # plt.show()
-        plt.imshow(image_B_rgb)
-        plt.show()
         # Reshape to (C, H, W)
         image_B = np.transpose(image_B_rgb, (2, 0, 1))
         if not single_view:
@@ -494,78 +493,77 @@ class EvaluateRealRobot:
         
         ### Stepping function to execute action with robot
         #TODO: Execute Motion
+        ee_pose_list = []
+        joint_states = []
+
         EE_Pose_Node = EndEffectorPoseNode("exec")
-        end_effector_pos = [float(value) for value in end_effector_pos]
-        position = end_effector_pos[:3]
-        rot6d = end_effector_pos[3:9]
-        rot_m = rot6d_to_mat(np.array(rot6d))
-        quaternion = quat_from_rot_m(rot_m)
+        for ee_element in end_effector_pos:
+            ee_element = [float(value) for value in ee_element]
+            position = ee_element[:3]
+            rot6d = ee_element[3:9]
+            rot_m = rot6d_to_mat(np.array(rot6d))
+            quaternion = quat_from_rot_m(rot_m)
+
+            if self.action_def == "delta":
+                current_pos = EE_Pose_Node.get_fk()
+                np.array(quaternion)
+                print(current_pos)
+                print(f'action command {ee_element} delta')
+                next_rot = compute_next_quaternion(current_pos[3:], quaternion)
+                # Create Pose message for IK
+                target_pose = Pose()
+                target_pose.position.x = current_pos[0] + position[0]
+                target_pose.position.y = current_pos[1] +  position[1]
+                target_pose.position.z = current_pos[2] +  position[2]
+                target_pose.orientation.x = next_rot[0]
+                target_pose.orientation.y = next_rot[1]
+                target_pose.orientation.z = next_rot[2]
+                target_pose.orientation.w = next_rot[3]
+            else:
+                print(f'action command {ee_element} absolute')
+                # Create Pose message for IK
+                target_pose = Pose()
+                target_pose.position.x = position[0]
+                target_pose.position.y = position[1]
+                target_pose.position.z = position[2]
+                target_pose.orientation.x = quaternion[0]
+                target_pose.orientation.y = quaternion[1]
+                target_pose.orientation.z = quaternion[2]
+                target_pose.orientation.w = quaternion[3]
+
+            joint_states.append(EE_Pose_Node.get_ik(target_pose))
+            if joint_states is None:
+                EE_Pose_Node.get_logger().warn("Failed to get IK solution")
+        
         kuka_execution = KukaMotionPlanning(steps)
 
-
-        if self.action_def == "delta":
-            current_pos = EE_Pose_Node.get_fk()
-            np.array(quaternion)
-            print(current_pos)
-            print(f'action command {end_effector_pos} delta')
-            next_rot = compute_next_quaternion(current_pos[3:], quaternion)
-            # Create Pose message for IK
-            target_pose = Pose()
-            target_pose.position.x = current_pos[0] + position[0]
-            target_pose.position.y = current_pos[1] +  position[1]
-            target_pose.position.z = current_pos[2] +  position[2]
-            target_pose.orientation.x = next_rot[0]
-            target_pose.orientation.y = next_rot[1]
-            target_pose.orientation.z = next_rot[2]
-            target_pose.orientation.w = next_rot[3]
-        else:
-            print(f'action command {end_effector_pos} absolute')
-            # Create Pose message for IK
-            target_pose = Pose()
-            target_pose.position.x = position[0]
-            target_pose.position.y = position[1]
-            target_pose.position.z = position[2]
-            target_pose.orientation.x = quaternion[0]
-            target_pose.orientation.y = quaternion[1]
-            target_pose.orientation.z = quaternion[2]
-            target_pose.orientation.w = quaternion[3]
-
         # Get IK solution
-        joint_state = EE_Pose_Node.get_ik(target_pose)
-        if joint_state is None:
-            EE_Pose_Node.get_logger().warn("Failed to get IK solution")
-        else: 
-            # # Create a JointTrajectory message
-            # goal_msg = FollowJointTrajectory.Goal()
-            # trajectory_msg = JointTrajectory()
-            kuka_execution.send_goal(joint_state)
-            current_gripper_pos = self.robotiq_gripper.get_gripper_current_pose()
-            if end_effector_pos[-1] < 0:
-                end_effector_pos[-1] = 0.0
-            delta_gripper = abs(current_gripper_pos - end_effector_pos[-1])
-            if delta_gripper > 0.1:
-                scaled_command = float(end_effector_pos[-1]*1.3)
-                if scaled_command > 0.8:
-                    scaled_command = 0.8
-                self.robotiq_gripper.send_gripper_command(scaled_command)
-            # # trajectory_msg.joint_names = kuka_execution.joint_names
-            # point = JointTrajectoryPoint()
-            # point.positions = joint_state.position
-            # point.time_from_start.sec = 1  # Set the duration for the motion
-            # trajectory_msg.points.append(point)
-            
-            # goal_msg.trajectory = trajectory_msg
-            # kuka_execution.send_goal(trajectory_msg)
+        
+        # # Create a JointTrajectory message
+        # goal_msg = FollowJointTrajectory.Goal()
+        # trajectory_msg = JointTrajectory()
+        gripper_commands = [sublist[-1] for sublist in end_effector_pos]
+        for i in range()
+        kuka_execution.send_goal(joint_states, gripper_commands)
 
-            # # Send the trajectory to the action server
-            # kuka_execution._action_client.wait_for_server()
-            # kuka_execution._send_goal_future = kuka_execution._action_client.send_goal_async(goal_msg, feedback_callback=kuka_execution.feedback_callback)
-            # kuka_execution._send_goal_future.add_done_callback(kuka_execution.goal_response_callback)
-            EE_Pose_Node.destroy_node()
-            kuka_execution.destroy_node()
-            # construct new observationqqqqqqq
-            obs = self.get_observation()
-            return obs
+        # # trajectory_msg.joint_names = kuka_execution.joint_names
+        # point = JointTrajectoryPoint()
+        # point.positions = joint_state.position
+        # point.time_from_start.sec = 1  # Set the duration for the motion
+        # trajectory_msg.points.append(point)
+        
+        # goal_msg.trajectory = trajectory_msg
+        # kuka_execution.send_goal(trajectory_msg)
+
+        # # Send the trajectory to the action server
+        # kuka_execution._action_client.wait_for_server()
+        # kuka_execution._send_goal_future = kuka_execution._action_client.send_goal_async(goal_msg, feedback_callback=kuka_execution.feedback_callback)
+        # kuka_execution._send_goal_future.add_done_callback(kuka_execution.goal_response_callback)
+        EE_Pose_Node.destroy_node()
+        kuka_execution.destroy_node()
+        # construct new observationqqqqqqq
+        obs = self.get_observation()
+        return obs
     
         # the final arch has 2 partsqqq
     ###### Load Pretrained 1
@@ -573,7 +571,7 @@ class EvaluateRealRobot:
 
         load_pretrained = True
         if load_pretrained:
-            ckpt_path = "checkpoints/resnet_force_mod_no_encode_hybrid__1000_DDIM_pretrained.pth"
+            ckpt_path = "checkpoints/resnet_force_mod_no_encode_hybrid__1000_DDIM.pth"
             #   if not os.path.isfile(ckpt_path):qq
             #       id = "1XKpfNSlwYMGqaF5CncoFaLKCDTWoLAHf1&confirm=tn"q
             #       gdown.download(id=id, output=ckpt_path, quiet=False)    
@@ -592,8 +590,6 @@ class EvaluateRealRobot:
         return ema_nets
     
     def inference(self):
-        def normalize(vec):
-            return vec / np.linalg.norm(vec)
         diffusion = self.diffusion
         max_steps = self.max_steps
         device = self.device
@@ -628,7 +624,6 @@ class EvaluateRealRobot:
                 stats['action']['min'] = np.array(stats['action']['min'], dtype=np.float32)
                 stats['action']['max'] = np.array(stats['action']['max'], dtype=np.float32)
         force_status = list()
-        resnet_featuers_list = []
 
         with tqdm(total=max_steps, desc="Eval Real Robot") as pbar:
             while not done:
@@ -697,18 +692,6 @@ class EvaluateRealRobot:
                             obs_features = torch.cat([joint_features, image_features_second_view, nagent_poses], dim=-1)
                     else:
                         print("Check your configuration for training")
-                    # with torch.no_grad():
-                    #     resnet_featuers_list.append(image_features.cpu().numpy().flatten())
-                    #     if len(resnet_featuers_list) >= 2:
-                    #         from scipy.spatial.distance import cosine
-
-                    #         print(len(resnet_featuers_list))
-                    #         embedding1 = normalize(resnet_featuers_list[-2])
-                    #         embedding2 = normalize(resnet_featuers_list[-1])
-                    #         similarity = 1 - cosine(embedding1, embedding2)
-                    #         print(f"Cosine Similarity: {similarity}")
-                    #         distance = euclidean(embedding1, embedding2)    
-                    #         print(f"Euclidean Distance: {distance}")
 
                     # reshape observation to (B,obs_horizon*obs_dim)
                     obs_cond = obs_features.unsqueeze(0).flatten(start_dim=1)
@@ -746,34 +729,33 @@ class EvaluateRealRobot:
                 # only take action_horizon number of actions
                 start = diffusion.obs_horizon - 1
                 
-                end = start + diffusion.action_horizon -3
+                end = start + diffusion.action_horizon
                 action = action_pred[start:end,:] 
             # (action_horizon, action_dim)
     
                 # execute action_horizon number of steps
                 # without replanning
-                for i in range(len(action)):
-                    # stepping env
-                    obs = self.execute_action(action[i], steps)
-                    steps+=1
+                # stepping env
+                obs = self.execute_action(action, steps)
+                steps+= len(action)
 
 
-                    # save observations
-                    obs_deque.append(obs)
-                    if self.force_mod:
-                        force_status.append(obs['force'])
-                    # and reward/vis
-                    # rewards.append(reward)
-                    # imgs.append(env.render(mode='rgb_array'))
+                # save observations
+                obs_deque.append(obs)
+                if self.force_mod:
+                    force_status.append(obs['force'])
+                # and reward/vis
+                # rewards.append(reward)
+                # imgs.append(env.render(mode='rgb_array'))
 
-                    # update progress bar
-                    step_idx += 1
-                    pbar.update(1)
-                    # pbar.set_postfix(reward=reward)
-                    if step_idx > max_steps:
-                        done = True
-                    if done:
-                        break
+                # update progress bar
+                step_idx += len(action)
+                pbar.update(len(action))
+                # pbar.set_postfix(reward=reward)
+                if step_idx > max_steps:
+                    done = True
+                if done:
+                    break
         # print out the maximum target coverage
 
         # print('Score: ', max(rewards))

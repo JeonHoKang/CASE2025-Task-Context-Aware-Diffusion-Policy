@@ -24,7 +24,7 @@ class ControlRobotiq:
 
 def main():
     gripper = ControlRobotiq()
-    # gripper.goTo(0)
+    gripper.send_gripper_command(0.8)
 
 if __name__ == "__main__":
     main()
