@@ -15,7 +15,7 @@ class train_utils:
     #@markdown - `replace_bn_with_gn` to replace all BatchNorm layers with GroupNorm
 
   
-    def get_resnet(self, name, weights=None, **kwargs):
+    def get_resnet(self, name, weights=True, **kwargs):
         """
         name: resnet18, resnet34, resnet50
         weights: "IMAGENET1K_V1", "r3m"
