@@ -25,6 +25,7 @@ class train_utils:
             return self.get_r3m(name=name, **kwargs)
 
         func = getattr(torchvision.models, name)
+        
         resnet = func(weights=weights, **kwargs)
         resnet.fc = torch.nn.Identity()
         return resnet

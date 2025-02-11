@@ -483,7 +483,7 @@ def get_filename(input_string):
         return ""
 
 
-dataset_path = "wire_47.zarr.zip"
+dataset_path = "/home/jeon/jeon_ws/DP_cable_disconnection/wire_47_segmented.zarr.zip"
 
 #@markdown ### **Network Demo**
 class DiffusionPolicy_Real:     
@@ -496,7 +496,8 @@ class DiffusionPolicy_Real:
                 force_encode = False,
                 force_encoder = "Linear",
                 cross_attn: bool = False,
-                hybrid: bool = False):
+                hybrid: bool = False,
+                segment: bool = True):
         # action dimension should also correspond with the state dimension (x,y,z, x, y, z, w)
         action_dim = 10
         # parameters
@@ -504,6 +505,9 @@ class DiffusionPolicy_Real:
         obs_horizon = 2
         action_horizon = 8
         lowdim_obs_dim = 10
+        if segment:
+            lowdim_obs_dim += 2
+         
 
         #|o|o|                             observations: 2
         #| |a|a|a|a|a|a|a|a|               actions executed: 8
@@ -522,7 +526,7 @@ class DiffusionPolicy_Real:
         # Define Second vision encoder
 
         if not single_view:
-            vision_encoder2 = train_utils().get_resnet('resnet18')
+            vision_encoder2 = train_utils().get_resnet('resnet34')
             vision_encoder2 = train_utils().replace_bn_with_gn(vision_encoder2)
         if force_encode:
             if encoder == "viT":
@@ -600,7 +604,8 @@ class DiffusionPolicy_Real:
                 Transformer= Transformer_bool,
                 force_mod = force_mod,
                 single_view=single_view,
-                augment = False)
+                augment = False,
+                segment = segment)
             # save training data statistics (min, max) for each dim
 
 
@@ -702,6 +707,10 @@ class DiffusionPolicy_Real:
                 print("batch['force'].shape:", batch['force'].shape)
 
             print("batch['action'].shape", batch['action'].shape)
+            print("batch['segment'].shape", batch['segment'].shape)
+            print("batch['object'].shape", batch['object'].shape)
+
+
             self.batch = batch
 
         # create network object

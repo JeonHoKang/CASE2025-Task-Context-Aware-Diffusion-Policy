@@ -14,7 +14,7 @@ import hydra
 from omegaconf import DictConfig
 
 # Make sure Crop is all there
-@hydra.main(version_base=None, config_path="config", config_name="resnet_force_mod_no_encode")
+@hydra.main(version_base=None, config_path="config", config_name="resnet_force_mod_no_encode_modality")
 def train_Real_Robot(cfg: DictConfig):
     continue_training=  cfg.model_config.continue_training
     start_epoch = cfg.model_config.start_epoch
@@ -27,6 +27,7 @@ def train_Real_Robot(cfg: DictConfig):
     force_encoder = cfg.model_config.force_encoder
     cross_attn = cfg.model_config.cross_attn
     hybrid = cfg.model_config.hybrid
+    segment = cfg.model_config.segment
 
     if force_encode:
         cross_attn = False
@@ -42,7 +43,8 @@ def train_Real_Robot(cfg: DictConfig):
                                     force_encode=force_encode,
                                     force_encoder=force_encoder,
                                     cross_attn=cross_attn,
-                                    hybrid = hybrid)
+                                    hybrid = hybrid,
+                                    segment = segment)
     data_name = diffusion.data_name
 
     device = torch.device('cuda')
@@ -75,7 +77,7 @@ def train_Real_Robot(cfg: DictConfig):
     # Note that EMA parametesr are not optimized
     optimizer = torch.optim.AdamW(
         params=diffusion.nets.parameters(),
-        lr=1e-4, weight_decay=1e-6)
+        lr=2e-4, weight_decay=1e-6)
 
     # Cosine LR schedule with linear warmup
     lr_scheduler = get_scheduler(
@@ -117,7 +119,8 @@ def train_Real_Robot(cfg: DictConfig):
                         nforce = None
                     nagent_pos = nbatch['agent_pos'][:,:diffusion.obs_horizon].to(device)
                     naction = nbatch['action'].to(device)
-                    
+                    nsegment = nbatch['segment'].to(device)
+                    nobject = nbatch['segment'].to(device)
                     ## Debug sequential data structure. It shoud be consecutive
                     # import matplotlib.pyplot as plt
                     # imdata1 = nimage[0].cpu()
@@ -200,7 +203,8 @@ def train_Real_Robot(cfg: DictConfig):
                             obs_features = torch.cat([joint_features, image_features_second_view, nagent_pos], dim=-1)
                     else:
                         print("Check your configuration for training")
-
+                    if segment:
+                        obs_features = torch.cat([obs_features, nsegment, nobject], dim=-1)
                     obs_cond = obs_features.flatten(start_dim=1)
                     # (B, obs_horizon * obs_dim)
 
@@ -250,7 +254,7 @@ def train_Real_Robot(cfg: DictConfig):
             if epoch_idx >= 900:
                 if (epoch_idx + 1) % 20 == 0 or (epoch_idx + 1) == end_epoch:
                     # Save only the state_dict of the model, including relevant submodules
-                    torch.save(diffusion.nets.state_dict(),  os.path.join(checkpoint_dir, f'{cfg.name}_{data_name}_{epoch_idx+1}_DDIM.pth'))
+                    torch.save(diffusion.nets.state_dict(),  os.path.join(checkpoint_dir, f'{cfg.name}_{data_name}_{epoch_idx+1}_DDIM_segmented.pth'))
     # Plot the loss after training is complete
     plt.figure(figsize=(10, 6))
     plt.plot(range(1, end_epoch + 1), epoch_losses, marker='o', label='Training Loss')

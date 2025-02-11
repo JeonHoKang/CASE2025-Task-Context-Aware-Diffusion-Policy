@@ -226,7 +226,8 @@ class RealRobotDataSet(torch.utils.data.Dataset):
                  Transformer: bool = False,
                  force_mod: bool = False,
                  single_view: bool = False,
-                 augment: bool = True):
+                 augment: bool = True,
+                 segment: bool = False):
         
         # read from zarr dataset
         dataset_root = zarr.open(dataset_path, 'r')
@@ -275,12 +276,14 @@ class RealRobotDataSet(torch.utils.data.Dataset):
             normalized_train_data[key] = np.hstack((normalized_position, normalized_orientation))
             ## TODO: Add code that will handle - and + sign for quaternion
         if force_mod:
-            train_force_data = dataset_root['data']['state'][:,10:]
+            train_force_data = dataset_root['data']['state'][:,10:16]
             stats['forcetorque'] = data_utils.get_data_stats(train_force_data)
             normalized_forcetorque = data_utils.normalize_data(train_force_data, stats['forcetorque'])
         
         # Start adding normalized training data
         normalized_train_data['image'] = train_image_data
+        normalized_train_data['segment'] = dataset_root['data']['state'][:,16]
+        normalized_train_data['object'] = dataset_root['data']['state'][:,17]
 
         # images are already normalized
         normalized_train_data['force'] = normalized_forcetorque
@@ -296,6 +299,7 @@ class RealRobotDataSet(torch.utils.data.Dataset):
         self.force_mod = force_mod
         self.single_view = single_view
         self.augment = augment
+        self.segment = segment
         print(f"augment : {augment}")
         if self.augment:
             self.augmentation_transform = transforms.Compose([
@@ -343,7 +347,7 @@ class RealRobotDataSet(torch.utils.data.Dataset):
 
         # nsample['image'] = nsample['image'][:self.obs_horizon,:]
         nsample['agent_pos'] = nsample['agent_pos'][:self.obs_horizon,:]
-
+        
         if self.force_mod:
             # discard unused observations
             if self.augment:
@@ -354,6 +358,10 @@ class RealRobotDataSet(torch.utils.data.Dataset):
                 nsample['force'] = force_augmented.astype(np.float32)
             else:
                 nsample['force'] = nsample['force'][:self.obs_horizon,:]
+        if self.segment:
+            nsample['segment'] = nsample['segment'][:self.obs_horizon].reshape(self.obs_horizon, 1) # 1 d
+            nsample['object'] = nsample['object'][:self.obs_horizon].reshape(self.obs_horizon, 1) # 1 d
+
         # if not self.single_view:
         #     # discard unused observations
         #     nsample['image2'] = nsample['image2'][:self.obs_horizon,:]
