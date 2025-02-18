@@ -44,7 +44,7 @@ def train_Real_Robot(cfg: DictConfig):
                                     force_encoder=force_encoder,
                                     cross_attn=cross_attn,
                                     hybrid = hybrid,
-                                    segment = segment)
+                                    segment= segment)
     data_name = diffusion.data_name
 
     device = torch.device('cuda')
@@ -77,7 +77,7 @@ def train_Real_Robot(cfg: DictConfig):
     # Note that EMA parametesr are not optimized
     optimizer = torch.optim.AdamW(
         params=diffusion.nets.parameters(),
-        lr=2e-4, weight_decay=1e-6)
+        lr=1e-4, weight_decay=1e-6)
 
     # Cosine LR schedule with linear warmup
     lr_scheduler = get_scheduler(
@@ -119,8 +119,9 @@ def train_Real_Robot(cfg: DictConfig):
                         nforce = None
                     nagent_pos = nbatch['agent_pos'][:,:diffusion.obs_horizon].to(device)
                     naction = nbatch['action'].to(device)
-                    nsegment = nbatch['segment'].to(device)
-                    nobject = nbatch['segment'].to(device)
+                    if segment:
+                        nsegment = nbatch['segment'][:,:diffusion.obs_horizon].to(device)
+                        nobject = nbatch['object'][:,:diffusion.obs_horizon].to(device)           
                     ## Debug sequential data structure. It shoud be consecutive
                     # import matplotlib.pyplot as plt
                     # imdata1 = nimage[0].cpu()
@@ -183,6 +184,8 @@ def train_Real_Robot(cfg: DictConfig):
                     # (B,obs_horizon,D)
                     if force_mod and single_view and not cross_attn:
                         obs_features = torch.cat([image_features, force_feature, nagent_pos], dim=-1)
+                        if segment:
+                            obs_features = torch.cat([obs_features, nsegment, nobject], dim=-1)
                     elif force_mod and not single_view and not cross_attn:
                         obs_features = torch.cat([image_features, image_features_second_view, force_feature, nagent_pos], dim=-1)
                     elif not force_mod and single_view:
@@ -203,8 +206,7 @@ def train_Real_Robot(cfg: DictConfig):
                             obs_features = torch.cat([joint_features, image_features_second_view, nagent_pos], dim=-1)
                     else:
                         print("Check your configuration for training")
-                    if segment:
-                        obs_features = torch.cat([obs_features, nsegment, nobject], dim=-1)
+
                     obs_cond = obs_features.flatten(start_dim=1)
                     # (B, obs_horizon * obs_dim)
 
@@ -251,10 +253,10 @@ def train_Real_Robot(cfg: DictConfig):
             tglobal.set_postfix(loss=avg_loss)
             
             # Save checkpoint every 10 epochs or at the end of training
-            if epoch_idx >= 900:
-                if (epoch_idx + 1) % 20 == 0 or (epoch_idx + 1) == end_epoch:
+            if epoch_idx >= 900 or (epoch_idx+1) == 1:
+                if (epoch_idx + 1) % 20 == 0 or (epoch_idx + 1) == end_epoch or (epoch_idx +1) == 1:
                     # Save only the state_dict of the model, including relevant submodules
-                    torch.save(diffusion.nets.state_dict(),  os.path.join(checkpoint_dir, f'{cfg.name}_{data_name}_{epoch_idx+1}_DDIM_segmented.pth'))
+                    torch.save(diffusion.nets.state_dict(),  os.path.join(checkpoint_dir, f'{cfg.name}_{data_name}_{epoch_idx+1}_20_DDIM_resnet34pre.pth'))
     # Plot the loss after training is complete
     plt.figure(figsize=(10, 6))
     plt.plot(range(1, end_epoch + 1), epoch_losses, marker='o', label='Training Loss')
