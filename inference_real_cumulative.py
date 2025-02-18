@@ -31,7 +31,7 @@ from rclpy.impl.implementation_singleton import rclpy_implementation as _rclpy
 from rclpy.qos import QoSProfile
 from rclpy.signals import SignalHandlerGuardCondition
 from rclpy.utilities import timeout_sec_to_nsec
-from kuka_execute import KukaMotionPlanning
+from kuka_execute_cumulative import KukaMotionPlanning
 import cv2
 from rotation_utils import quat_from_rot_m, rot6d_to_mat, mat_to_rot6d, quat_to_rot_m, normalize
 import hydra
@@ -312,25 +312,25 @@ class EndEffectorPoseNode(Node):
                 joint_constraint = JointConstraint()
                 joint_constraint.joint_name = joint_name
                 joint_constraint.position = current_position
-                joint_constraint.tolerance_below = np.pi/4
-                joint_constraint.tolerance_above = np.pi/4
-                joint_constraint.weight = 1.0
+                joint_constraint.tolerance_below = np.pi/2
+                joint_constraint.tolerance_above = np.pi/2
+                joint_constraint.weight = 0.5
                 constraints.joint_constraints.append(joint_constraint)
             elif joint_name == "A2":
-                joint_constraint = JointConstraint()
-                joint_constraint.joint_name = joint_name
-                joint_constraint.position = current_position
-                joint_constraint.tolerance_below = np.pi/4
-                joint_constraint.tolerance_above = np.pi/4
-                joint_constraint.weight = 1.0
-                constraints.joint_constraints.append(joint_constraint)
-            elif joint_name == "A3":
                 joint_constraint = JointConstraint()
                 joint_constraint.joint_name = joint_name
                 joint_constraint.position = current_position
                 joint_constraint.tolerance_below = np.pi/2
                 joint_constraint.tolerance_above = np.pi/2
                 joint_constraint.weight = 0.5
+                constraints.joint_constraints.append(joint_constraint)
+            elif joint_name == "A3":
+                joint_constraint = JointConstraint()
+                joint_constraint.joint_name = joint_name
+                joint_constraint.position = current_position
+                joint_constraint.tolerance_below = np.pi/5
+                joint_constraint.tolerance_above = np.pi/5
+                joint_constraint.weight = 0.8
                 constraints.joint_constraints.append(joint_constraint)
             elif joint_name == "A4":
                 joint_constraint = JointConstraint()
@@ -344,8 +344,8 @@ class EndEffectorPoseNode(Node):
                 joint_constraint = JointConstraint()
                 joint_constraint.joint_name = joint_name
                 joint_constraint.position = current_position
-                joint_constraint.tolerance_below = np.pi/3
-                joint_constraint.tolerance_above = np.pi/3
+                joint_constraint.tolerance_below = np.pi/2
+                joint_constraint.tolerance_above = np.pi/2
                 joint_constraint.weight = 0.5
                 constraints.joint_constraints.append(joint_constraint)
 
@@ -576,7 +576,7 @@ class EvaluateRealRobot:
         image_B_rgb = cv2.cvtColor(cropped_image_B, cv2.COLOR_BGR2RGB)
          ### Visualizing purposes
         # import nodes
-        print(f'current agent position, {agent_pos}')
+        # print(f'current agent position, {agent_pos}')
         self.save_agent_pos_to_csv(force_torque_data)
         agent_position = agent_pos[:3]
         agent_rotation = agent_pos[3:]
@@ -585,9 +585,9 @@ class EvaluateRealRobot:
         rot_m_agent = quat_to_rot_m(agent_rotation)
         rot_6d = mat_to_rot6d(rot_m_agent)
         agent_pos_10d = np.hstack((agent_position, rot_6d, gripper_pos))
-        import matplotlib.pyplot as plt
-        # plt.imshow(image_A_rgb)
-        # # plt.show()
+        # import matplotlib.pyplot as plt
+        # # plt.imshow(image_A_rgb)
+        # # # plt.show()
         # plt.imshow(image_B_rgb)
         # plt.show()
         # Reshape to (C, H, W)
@@ -604,7 +604,7 @@ class EvaluateRealRobot:
         return obs
 
     
-    def execute_action(self, end_effector_pos, steps):
+    def execute_action(self, end_effector_pos, gripper_action, steps):
         def quaternion_multiply(q1, q2):
             x1, y1, z1, w1 = q1  # Note: [qx, qy, qz, qw]
             x2, y2, z2, w2 = q2
@@ -622,48 +622,52 @@ class EvaluateRealRobot:
             return q_next / np.linalg.norm(q_next)
         
         ### Stepping function to execute action with robot
-        #TODO: Execute Motion
         EE_Pose_Node = EndEffectorPoseNode("exec")
-        end_effector_pos = [float(value) for value in end_effector_pos]
-        position = end_effector_pos[:3]
-        rot6d = end_effector_pos[3:9]
-        rot_m = rot6d_to_mat(np.array(rot6d))
-        quaternion = quat_from_rot_m(rot_m)
         kuka_execution = KukaMotionPlanning(steps)
+        waypoint_list = []
+        obs_list = []
+        for i, pose in enumerate(end_effector_pos):
+            waypoint = [float(value) for value in pose]
+            position = waypoint[:3]
+            rot6d = waypoint[3:9]
+            rot_m = rot6d_to_mat(np.array(rot6d))
+            quaternion = quat_from_rot_m(rot_m)
+            
+            if self.action_def == "delta":
+                current_pos = EE_Pose_Node.get_fk()
+                np.array(quaternion)
+                print(current_pos)
+                # print(f'action command {end_effector_pos} delta')
+                next_rot = compute_next_quaternion(current_pos[3:], quaternion)
+                # Create Pose message for IK
+                target_pose = Pose()
+                target_pose.position.x = current_pos[0] + position[0]
+                target_pose.position.y = current_pos[1] +  position[1]
+                target_pose.position.z = current_pos[2] +  position[2]
+                target_pose.orientation.x = next_rot[0]
+                target_pose.orientation.y = next_rot[1]
+                target_pose.orientation.z = next_rot[2]
+                target_pose.orientation.w = next_rot[3]
+            else:
+                print(f'action command {end_effector_pos} absolute')
+                # Create Pose message for IK
+                target_pose = Pose()
+                target_pose.position.x = position[0]
+                target_pose.position.y = position[1]
+                target_pose.position.z = position[2]
+                target_pose.orientation.x = quaternion[0]
+                target_pose.orientation.y = quaternion[1]
+                target_pose.orientation.z = quaternion[2]
+                target_pose.orientation.w = quaternion[3]
+
+            # Get IK solution
 
 
-        if self.action_def == "delta":
-            current_pos = EE_Pose_Node.get_fk()
-            np.array(quaternion)
-            print(current_pos)
-            print(f'action command {end_effector_pos} delta')
-            next_rot = compute_next_quaternion(current_pos[3:], quaternion)
-            # Create Pose message for IK
-            target_pose = Pose()
-            target_pose.position.x = current_pos[0] + position[0]
-            target_pose.position.y = current_pos[1] +  position[1]
-            target_pose.position.z = current_pos[2] +  position[2]
-            target_pose.orientation.x = next_rot[0]
-            target_pose.orientation.y = next_rot[1]
-            target_pose.orientation.z = next_rot[2]
-            target_pose.orientation.w = next_rot[3]
-        else:
-            print(f'action command {end_effector_pos} absolute')
-            # Create Pose message for IK
-            target_pose = Pose()
-            target_pose.position.x = position[0]
-            target_pose.position.y = position[1]
-            target_pose.position.z = position[2]
-            target_pose.orientation.x = quaternion[0]
-            target_pose.orientation.y = quaternion[1]
-            target_pose.orientation.z = quaternion[2]
-            target_pose.orientation.w = quaternion[3]
+            joint_state = EE_Pose_Node.get_ik(target_pose)
+            if joint_state is None:
+                joint_state = EE_Pose_Node.get_ik(target_pose)
 
-        # Get IK solution
-
-
-        joint_state = EE_Pose_Node.get_ik(target_pose)
-
+            waypoint_list.append(joint_state)
 
         if joint_state is None:
             EE_Pose_Node.get_logger().warn("Failed to get IK solution")
@@ -671,18 +675,36 @@ class EvaluateRealRobot:
             # # Create a JointTrajectory message
             # goal_msg = FollowJointTrajectory.Goal()
             # trajectory_msg = JointTrajectory()
-            kuka_execution.send_goal(joint_state)
-            current_gripper_pos = self.robotiq_gripper.get_gripper_current_pose()
-            print(f"gripper current pose {current_gripper_pos}")
-            if end_effector_pos[-1] < 0:
-                end_effector_pos[-1] = 0.0
-            delta_gripper = abs(current_gripper_pos - end_effector_pos[-1])
-            print(f'delta gripper : {delta_gripper}')
-            print(f"end_effector_pos[-1]: {end_effector_pos[-1]}")
-            scaled_command = float(end_effector_pos[-1]*1.4)
-            if scaled_command > 0.8:
-                scaled_command = 0.8
-            self.robotiq_gripper.send_gripper_command(scaled_command)
+            kuka_execution.send_goal(waypoint_list)
+            for position_idx in range(len(end_effector_pos)):
+                obs_time = time.time()
+                obs = self.get_observation()
+                obs_list.append(obs)
+                current_gripper_pos = self.robotiq_gripper.get_gripper_current_pose()
+                # print(f"gripper current pose {current_gripper_pos}")
+                if gripper_action[position_idx] < 0:
+                    gripper_action[position_idx] = 0.0
+                delta_gripper = abs(current_gripper_pos - gripper_action[position_idx])
+                # print(f'delta gripper : {delta_gripper}')
+                scaled_command = float(gripper_action[position_idx]*1.4)
+                if scaled_command > 0.8:
+                    scaled_command = 0.8
+                self.robotiq_gripper.send_gripper_command(scaled_command)
+                if position_idx == len(end_effector_pos)-1:
+                    time.sleep(0.0)
+                # elif position_idx == len(end_effector_pos)-2:
+                #     time.sleep(0.01)
+                else:
+                    time.sleep(0.17)
+                # obs_end_time = time.time()
+                # duration_obs = obs_end_time-obs_time
+                # print(f"obs duration : {duration_obs}")
+            # import matplotlib.pyplot as plt
+            # # plt.imshow(image_A_rgb)
+            # # # plt.show()
+
+            # Reshape to (C, H, W)
+
             
             # # trajectory_msg.joint_names = kuka_execution.joint_names
             # point = JointTrajectoryPoint()
@@ -697,11 +719,10 @@ class EvaluateRealRobot:
             # kuka_execution._action_client.wait_for_server()
             # kuka_execution._send_goal_future = kuka_execution._action_client.send_goal_async(goal_msg, feedback_callback=kuka_execution.feedback_callback)
             # kuka_execution._send_goal_future.add_done_callback(kuka_execution.goal_response_callback)
-            EE_Pose_Node.destroy_node()
-            kuka_execution.destroy_node()
+
             # construct new observationqqqqqqq
-            obs = self.get_observation()
-            return obs
+
+            return obs_list
     
         # the final arch has 2 partsqqq
     ###### Load Pretrained 1
@@ -769,6 +790,7 @@ class EvaluateRealRobot:
         pose_record = []
         with tqdm(total=max_steps, desc="Eval Real Robot") as pbar:
             while not done:
+                inference_start = time.time()
                 B = 1
                 # stack the last obs_horizon number of observations
                 if not self.single_view:
@@ -784,7 +806,7 @@ class EvaluateRealRobot:
                 nagent_poses = data_utils.normalize_data(agent_poses[:,:3], stats=stats['agent_pos'])
                 if force_mod:
                     normalized_force_data = data_utils.normalize_data(force_obs, stats=stats['forcetorque'])
-                # images are already normalized to [0,1]qqq
+                # images are already normalized to [0,1]
                 if not self.single_view:
                     nimages = images_A
                     nimages = torch.from_numpy(nimages).to(device, dtype=torch.float32)
@@ -800,10 +822,10 @@ class EvaluateRealRobot:
 
                 processed_agent_poses = np.hstack((nagent_poses, agent_poses[:,3:]))
                 nagent_poses = torch.from_numpy(processed_agent_poses).to(device, dtype=torch.float32)
-                object = np.array([0,0]).reshape(2,1)
+                object = np.array([1,1]).reshape(2,1)
                 if self.segment:
-                    segment_in = int(input("segment : "))
-
+                    # segment_in = int(input("segment : "))
+                    segment_in = 0
                     # if segment_in == 1:
                     #     self.robotiq_gripper.send_gripper_command(0.8)
                     segment_arr = np.array([segment_in, segment_in]).reshape(2,1)
@@ -865,10 +887,10 @@ class EvaluateRealRobot:
                     noisy_action = torch.randn(
                         (B, diffusion.pred_horizon, diffusion.action_dim), device=device)
                     naction = noisy_action
-                    diffusion_inference_iteration = 25
+                    diffusion_inference_iteration = 15
                     # init scheduler
                     diffusion.noise_scheduler.set_timesteps(diffusion_inference_iteration)
-                    denoising_time_start = time.time()
+                    # denoising_time_start = time.time()
                     for k in diffusion.noise_scheduler.timesteps:
                         # predict noise
                         noise_pred = ema_nets['noise_pred_net'](
@@ -883,11 +905,11 @@ class EvaluateRealRobot:
                             timestep=k,
                             sample=naction
                         ).prev_sample
-                        # naction_visualize = naction.detach().to('cpu').numpy()
+                        naction_visualize = naction.detach().to('cpu').numpy()
                         # plot_delta_actions(naction_visualize[0])
-                    denoising_time_end = time.time()
-                    duration = denoising_time_end - denoising_time_start
-                    print(f"duration : {duration}")
+                    # denoising_time_end = time.time()
+                    # duration = denoising_time_end - denoising_time_start
+                    # print(f"duration : {duration}")
                 # unnormalize action
                 naction = naction.detach().to('cpu').numpy()
                 # (B, pred_horizon, action_dim)q
@@ -898,88 +920,87 @@ class EvaluateRealRobot:
                 # only take action_horizon number of actions
                 start = diffusion.obs_horizon - 1
                 
-                end = start + diffusion.action_horizon
+                end = start + diffusion.action_horizon + 3
                 action = action_pred[start:end,:] 
+                robot_action = [sublist[:-1] for sublist in action]
+                robot_action = delta_to_cumulative(robot_action)
+                gripper_action = [sublist[-1] for sublist in action]
             # (action_horizon, action_dim)
 
                 # execute action_horizon number of steps
                 # without replanning
                 
-                for i in range(len(action)):
-                    # stepping env
-                    start_ik = time.time()
-                    
-                    obs = self.execute_action(action[i], steps)
-                    end_effector_pos = [float(value) for value in action[i]]
-                    position = end_effector_pos[:3]
-                    rot6d = end_effector_pos[3:9]
-                    rot_m = rot6d_to_mat(np.array(rot6d))
-                    quaternion = quat_from_rot_m(rot_m)
-                    pose_record.append(np.concatenate((position, quaternion)))
-                    end_ik = time.time()
-                    duration_ik = end_ik - start_ik
-                    print(f"Duration for IK: {duration_ik}")
-                    steps+=1
+                # stepping env
+                inference_end = time.time()
+                duratino_inference = inference_end - inference_start
+                print(f"Duration : {duratino_inference}")
+                obs = self.execute_action(robot_action, gripper_action, len(action))
+                steps+=len(action)
 
 
-                    # save observations
-                    obs_deque.append(obs)
-                    if self.force_mod:
-                        force_status.append(obs['force'])
+                # save observations
+                obs_deque.extend(obs)
+                # for i, img in enumerate(obs_deque):
+                #     image_B = np.transpose(img["image_B"], (1, 2, 0))
+
+                #     plt.imshow(image_B)
+                #     plt.show()
+                    # if self.force_mod:
+                    #     force_status.append(obs['force'])
                     # and reward/vis
                     # rewards.append(reward)
                     # imgs.append(env.render(mode='rgb_array'))
 
-                    # update progress bar
-                    step_idx += 1
-                    pbar.update(1)
-                    # pbar.set_postfix(reward=reward)
-                    if step_idx > max_steps:
-                        done = True
-                    if done:
-                        break
+                # update progress bar
+                step_idx += len(action)
+                pbar.update(len(action))
+                # pbar.set_postfix(reward=reward)
+                if step_idx > max_steps:
+                    done = True
+                if done:
+                    break
         # print out the maximum target coverage
 
         # print('Score: ', max(rewards))
         # return imgs
 
-        force = np.array(force_status)
-        Fx = force[:, 0]
-        Fy = force[:, 1]
-        Fz = force[:, 2]
+        # force = np.array(force_status)
+        # Fx = force[:, 0]
+        # Fy = force[:, 1]
+        # Fz = force[:, 2]
 
-        # Create a time vector or use index for x-axis
-        time = np.arange(len(Fx))
+        # # Create a time vector or use index for x-axis
+        # time = np.arange(len(Fx))
 
-        # Plotting the force components
-        plt.figure(figsize=(10, 6))
-        plt.plot(time, Fx, label='Fx', color='r', linestyle='-', linewidth=2)
-        plt.plot(time, Fy, label='Fy', color='g', linestyle='--', linewidth=2)
-        plt.plot(time, Fz, label='Fz', color='b', linestyle='-.', linewidth=2)
+        # # Plotting the force components
+        # plt.figure(figsize=(10, 6))
+        # plt.plot(time, Fx, label='Fx', color='r', linestyle='-', linewidth=2)
+        # plt.plot(time, Fy, label='Fy', color='g', linestyle='--', linewidth=2)
+        # plt.plot(time, Fz, label='Fz', color='b', linestyle='-.', linewidth=2)
 
-        # Add titles and labels
-        plt.title('Force Components Over Time', fontsize=16)
-        plt.xlabel('Time', fontsize=14)
-        plt.ylabel('Force (N)', fontsize=14)
+        # # Add titles and labels
+        # plt.title('Force Components Over Time', fontsize=16)
+        # plt.xlabel('Time', fontsize=14)
+        # plt.ylabel('Force (N)', fontsize=14)
 
-        # Add a grid
-        plt.grid(True, which='both', linestyle='--', linewidth=0.5)
+        # # Add a grid
+        # plt.grid(True, which='both', linestyle='--', linewidth=0.5)
 
-        # Add a legend
-        plt.legend(loc='best', fontsize=12)
+        # # Add a legend
+        # plt.legend(loc='best', fontsize=12)
 
-        # Show the plot
-        plt.tight_layout()
-        plt.show()
-        import pandas as pd
-        headers = ["delta_x", "delta_y", "delta_z", "delta_qx", "delta_qy", "delta_qz", "delta_qw"]
+        # # Show the plot
+        # plt.tight_layout()
+        # plt.show()
+        # import pandas as pd
+        # headers = ["delta_x", "delta_y", "delta_z", "delta_qx", "delta_qy", "delta_qz", "delta_qw"]
 
-        # Convert to DataFrame
-        df = pd.DataFrame(pose_record, columns=headers)
+        # # Convert to DataFrame
+        # df = pd.DataFrame(pose_record, columns=headers)
 
-        # Export to Excel file
-        excel_filename = "position_quaternion_data.xlsx"
-        df.to_excel(excel_filename, index=False)
+        # # Export to Excel file
+        # excel_filename = "position_quaternion_data.xlsx"
+        # df.to_excel(excel_filename, index=False)
 @hydra.main(version_base=None, config_path="config", config_name="resnet_force_mod_no_encode_modality")
 def main(cfg: DictConfig):
     # Max steps will dicate how long the inference duration is going to be so it is very important
@@ -987,7 +1008,7 @@ def main(cfg: DictConfig):
     rclpy.init()
     try:  
 
-        max_steps = 20
+        max_steps = 200
         # Evaluate Real Robot Environment
         print(f"inference on {cfg.name}")
         eval_real_robot = EvaluateRealRobot(max_steps= max_steps,

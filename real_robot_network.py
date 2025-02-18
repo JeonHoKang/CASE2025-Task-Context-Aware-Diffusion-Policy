@@ -497,7 +497,7 @@ class DiffusionPolicy_Real:
                 force_encoder = "Linear",
                 cross_attn: bool = False,
                 hybrid: bool = False,
-                segment: bool = True):
+                segment: bool = False):
         # action dimension should also correspond with the state dimension (x,y,z, x, y, z, w)
         action_dim = 10
         # parameters
@@ -554,7 +554,7 @@ class DiffusionPolicy_Real:
         else:
             if encoder == "resnet":
                 print("resnet")
-                vision_encoder = train_utils().get_resnet('resnet18')
+                vision_encoder = train_utils().get_resnet('resnet34')
                 vision_encoder = train_utils().replace_bn_with_gn(vision_encoder)
 
             elif encoder == "Transformer":
@@ -707,8 +707,9 @@ class DiffusionPolicy_Real:
                 print("batch['force'].shape:", batch['force'].shape)
 
             print("batch['action'].shape", batch['action'].shape)
-            print("batch['segment'].shape", batch['segment'].shape)
-            print("batch['object'].shape", batch['object'].shape)
+            if segment:
+                print("batch['segment'].shape", batch['segment'].shape)
+                print("batch['object'].shape", batch['object'].shape)
 
 
             self.batch = batch

@@ -1,17 +1,9 @@
 import numpy as np
 from typing import Tuple, Sequence, Dict, Union, Optional, Callable
 import numpy as np
-import math
 import torch
 import torch.nn as nn
-import torchvision
-import collections
 import zarr
-from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
-from diffusers.training_utils import EMAModel
-from diffusers.optimization import get_scheduler
-from tqdm.auto import tqdm
-import os
 from torchvision import transforms
 
 
@@ -282,8 +274,9 @@ class RealRobotDataSet(torch.utils.data.Dataset):
         
         # Start adding normalized training data
         normalized_train_data['image'] = train_image_data
-        normalized_train_data['segment'] = dataset_root['data']['state'][:,16]
-        normalized_train_data['object'] = dataset_root['data']['state'][:,17]
+        if segment:
+            normalized_train_data['segment'] = dataset_root['data']['state'][:,16]
+            normalized_train_data['object'] = dataset_root['data']['state'][:,17]
 
         # images are already normalized
         normalized_train_data['force'] = normalized_forcetorque
