@@ -11,3 +11,8 @@ gym==0.26.2
 shapely==1.8.4
 opencv-python
 gdown
+timm
+huggingface_hub==0.14.1
+matplotlib
+hydra-core
+numpy<2

@@ -483,7 +483,7 @@ def get_filename(input_string):
         return ""
 
 
-dataset_path = "/home/jeon/jeon_ws/DP_cable_disconnection/wire_47_segmented.zarr.zip"
+dataset_path = "nist_delta_99.zarr.zip"
 
 #@markdown ### **Network Demo**
 class DiffusionPolicy_Real:     
@@ -512,7 +512,7 @@ class DiffusionPolicy_Real:
         #|o|o|                             observations: 2
         #| |a|a|a|a|a|a|a|a|               actions executed: 8
         #|p|p|p|p|p|p|p|p|p|p|p|p|p|p|p|p| actions predicted: 16
-        batch_size = 95
+        batch_size = 128
         Transformer_bool = None
         modality = "without_force"
         view = "dual_view"
