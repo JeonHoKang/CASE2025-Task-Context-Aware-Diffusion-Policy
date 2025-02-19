@@ -483,7 +483,7 @@ def get_filename(input_string):
         return ""
 
 
-dataset_path = "nist_delta_99.zarr.zip"
+dataset_path = "nist_delta_99_remake.zarr.zip"
 
 #@markdown ### **Network Demo**
 class DiffusionPolicy_Real:     

@@ -328,9 +328,9 @@ class EndEffectorPoseNode(Node):
                 joint_constraint = JointConstraint()
                 joint_constraint.joint_name = joint_name
                 joint_constraint.position = current_position
-                joint_constraint.tolerance_below = np.pi/5
-                joint_constraint.tolerance_above = np.pi/5
-                joint_constraint.weight = 0.8
+                joint_constraint.tolerance_below = np.pi/6
+                joint_constraint.tolerance_above = np.pi/6
+                joint_constraint.weight = 1.0
                 constraints.joint_constraints.append(joint_constraint)
             elif joint_name == "A4":
                 joint_constraint = JointConstraint()
@@ -676,7 +676,7 @@ class EvaluateRealRobot:
             # goal_msg = FollowJointTrajectory.Goal()
             # trajectory_msg = JointTrajectory()
             kuka_execution.send_goal(waypoint_list)
-            for position_idx in range(len(end_effector_pos)):
+            for position_idx in range(len(end_effector_pos)-1):
                 obs_time = time.time()
                 obs = self.get_observation()
                 obs_list.append(obs)
@@ -695,7 +695,7 @@ class EvaluateRealRobot:
                 # elif position_idx == len(end_effector_pos)-2:
                 #     time.sleep(0.01)
                 else:
-                    time.sleep(0.17)
+                    time.sleep(0.14)
                 # obs_end_time = time.time()
                 # duration_obs = obs_end_time-obs_time
                 # print(f"obs duration : {duration_obs}")
@@ -887,7 +887,7 @@ class EvaluateRealRobot:
                     noisy_action = torch.randn(
                         (B, diffusion.pred_horizon, diffusion.action_dim), device=device)
                     naction = noisy_action
-                    diffusion_inference_iteration = 15
+                    diffusion_inference_iteration = 20
                     # init scheduler
                     diffusion.noise_scheduler.set_timesteps(diffusion_inference_iteration)
                     # denoising_time_start = time.time()
@@ -920,7 +920,7 @@ class EvaluateRealRobot:
                 # only take action_horizon number of actions
                 start = diffusion.obs_horizon - 1
                 
-                end = start + diffusion.action_horizon + 3
+                end = start + diffusion.action_horizon
                 action = action_pred[start:end,:] 
                 robot_action = [sublist[:-1] for sublist in action]
                 robot_action = delta_to_cumulative(robot_action)
