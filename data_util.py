@@ -263,9 +263,11 @@ class RealRobotDataSet(torch.utils.data.Dataset):
         for key, data in train_data.items():
             stats[key] = data_utils.get_data_stats(data[:,:3])
             normalized_position = data_utils.normalize_data(data[:,:3], stats[key])
-            normalized_orientation = data[:,3:10]
+            normalized_orientation = data[:,3:9]
+            stats[f"{key}_gripper"] = data_utils.get_data_stats(data[:,-1].reshape(-1,1))
+            normalized_gripper = data_utils.normalize_data(data[:,-1], stats[f"{key}_gripper"]).reshape(-1,1)
             # normalized_orientation = data_utils.process_quaternion(data[:,3:7])
-            normalized_train_data[key] = np.hstack((normalized_position, normalized_orientation))
+            normalized_train_data[key] = np.hstack((normalized_position, normalized_orientation, normalized_gripper))
             ## TODO: Add code that will handle - and + sign for quaternion
         if force_mod:
             train_force_data = dataset_root['data']['state'][:,10:16]
