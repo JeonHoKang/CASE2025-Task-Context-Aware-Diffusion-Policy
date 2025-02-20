@@ -123,7 +123,7 @@ def train_Real_Robot(cfg: DictConfig):
                         nsegment = nbatch['segment'][:,:diffusion.obs_horizon].to(device)
                         nobject = nbatch['object'][:,:diffusion.obs_horizon].to(device)           
                     ## Debug sequential data structure. It shoud be consecutive
-                    # import matplotlib.pyplot as plt
+                    # print(f"naction: {naction.cpu().numpy()}")
                     # imdata1 = nimage[0].cpu()
                     # imdata1 = imdata1.numpy()
                     # print(f"shape of the image data:", imdata1.shape)
@@ -138,7 +138,7 @@ def train_Real_Robot(cfg: DictConfig):
                     # #     # Plot the image on the corresponding subplot
                     #     axes[j].imshow(img)
                     #     axes[j].axis('off')  # Hide the axes
-                    #     # Show the plot
+                        # Show the plot
                     # plt.show()  
                     # For double realsense config only
                     # for j in range(2):
