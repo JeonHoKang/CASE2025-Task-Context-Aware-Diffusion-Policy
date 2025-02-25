@@ -483,7 +483,7 @@ def get_filename(input_string):
         return ""
 
 
-dataset_path = "nist_delta_99_remake.zarr.zip"
+dataset_path = "nist_only_rotating_no_segment.zarr.zip"
 
 #@markdown ### **Network Demo**
 class DiffusionPolicy_Real:     
@@ -512,7 +512,7 @@ class DiffusionPolicy_Real:
         #|o|o|                             observations: 2
         #| |a|a|a|a|a|a|a|a|               actions executed: 8
         #|p|p|p|p|p|p|p|p|p|p|p|p|p|p|p|p| actions predicted: 16
-        batch_size = 128
+        batch_size = 64
         Transformer_bool = None
         modality = "without_force"
         view = "dual_view"

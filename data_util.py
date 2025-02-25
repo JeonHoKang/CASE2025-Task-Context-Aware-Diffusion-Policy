@@ -92,7 +92,16 @@ class data_utils:
         ndata = (ndata + 1) / 2
         data = ndata * (stats['max'] - stats['min']) + stats['min']
         return data
+    
+    def normalize_gripper_data(data, stats):
+        # nomalize to [0,1]
+        ndata = (data - stats['min']) / (stats['max'] - stats['min'])
+        return ndata
 
+    def unnormalize_gripper_data(ndata, stats):
+        data = ndata * (stats['max'] - stats['min']) + stats['min']
+        return data
+    
     def process_quaternion(quaternion_array):
         negative_real_indices = quaternion_array[:, 3] < 0
         # Negate the entire quaternion for rows where the real component is negative
@@ -265,7 +274,7 @@ class RealRobotDataSet(torch.utils.data.Dataset):
             normalized_position = data_utils.normalize_data(data[:,:3], stats[key])
             normalized_orientation = data[:,3:9]
             stats[f"{key}_gripper"] = data_utils.get_data_stats(data[:,-1].reshape(-1,1))
-            normalized_gripper = data_utils.normalize_data(data[:,-1], stats[f"{key}_gripper"]).reshape(-1,1)
+            normalized_gripper = data_utils.normalize_gripper_data(data[:,-1], stats[f"{key}_gripper"]).reshape(-1,1)
             # normalized_orientation = data_utils.process_quaternion(data[:,3:7])
             normalized_train_data[key] = np.hstack((normalized_position, normalized_orientation, normalized_gripper))
             ## TODO: Add code that will handle - and + sign for quaternion
@@ -299,7 +308,7 @@ class RealRobotDataSet(torch.utils.data.Dataset):
         if self.augment:
             self.augmentation_transform = transforms.Compose([
                 transforms.RandomResizedCrop(size=(240, 320), scale=(0.5, 1.5)),
-                transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.2),
+                transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.0),
             ])
 
     def __len__(self):

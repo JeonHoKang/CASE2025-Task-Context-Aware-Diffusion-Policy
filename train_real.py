@@ -14,7 +14,7 @@ import hydra
 from omegaconf import DictConfig
 
 # Make sure Crop is all there
-@hydra.main(version_base=None, config_path="config", config_name="resnet_force_mod_no_encode_modality")
+@hydra.main(version_base=None, config_path="config", config_name="resnet_force_mod_no_encode")
 def train_Real_Robot(cfg: DictConfig):
     continue_training=  cfg.model_config.continue_training
     start_epoch = cfg.model_config.start_epoch
@@ -179,7 +179,7 @@ def train_Real_Robot(cfg: DictConfig):
                     
                     if cross_attn:
                         joint_features = diffusion.nets['cross_attn_encoder'](
-                            image_input, (nforce))
+                              image_input, (nforce))
 
                     # (B,obs_horizon,D)
                     if force_mod and single_view and not cross_attn:
