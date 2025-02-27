@@ -558,7 +558,7 @@ class DiffusionPolicy_Real:
         #|o|o|                             observations: 2
         #| |a|a|a|a|a|a|a|a|               actions executed: 8
         #|p|p|p|p|p|p|p|p|p|p|p|p|p|p|p|p| actions predicted: 16
-        batch_size = 3
+        batch_size = 16
         Transformer_bool = None
         modality = "without_force"
         view = "dual_view"
