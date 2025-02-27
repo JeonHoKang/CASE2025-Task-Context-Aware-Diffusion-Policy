@@ -213,9 +213,8 @@ class PushTImageDataset(torch.utils.data.Dataset):
         nsample['image'] = nsample['image'][:self.obs_horizon,:]
         nsample['agent_pos'] = nsample['agent_pos'][:self.obs_horizon,:]
         return nsample
+
     
-
-
 
 #@markdown ### **Dataset Demo**
 class RealRobotDataSet(torch.utils.data.Dataset):
@@ -247,6 +246,9 @@ class RealRobotDataSet(torch.utils.data.Dataset):
             train_image_data = center_crop(train_image_data, 224, 224)
         else:
             ("No Cropping")
+        # Define mappings
+        segment_mapping = {0: "Approach", 1: "Grasp", 2: "Unlock", 3: "Pull", 4: "Ungrasp"}
+        object_mapping = {0: "USB", 1: "Dsub", 2: "Ethernet", 3: "Bnc", 4: "Terminal Block"}
 
         # (N,3,96,96)
         # (N, D)
@@ -285,10 +287,16 @@ class RealRobotDataSet(torch.utils.data.Dataset):
         
         # Start adding normalized training data
         normalized_train_data['image'] = train_image_data
-        if segment:
-            normalized_train_data['segment'] = dataset_root['data']['state'][:,16]
-            normalized_train_data['object'] = dataset_root['data']['state'][:,17]
+        segment_indices = dataset_root['data']['state'][:, 16].astype(int)
+        object_indices = dataset_root['data']['state'][:, 17].astype(int)
+        segments = [segment_mapping[idx] for idx in segment_indices]
+        objects = [object_mapping[idx] for idx in object_indices]
+        # Convert integer arrays to string arrays
+        language_commands = [f"{seg} {obj}" for seg, obj in zip(segments, objects)]
+        normalized_train_data['language_command'] = np.array(language_commands, dtype=object).reshape(-1,1)
 
+
+        # Generate language commands
         # images are already normalized
         normalized_train_data['force'] = normalized_forcetorque
         if not single_view:
@@ -363,9 +371,7 @@ class RealRobotDataSet(torch.utils.data.Dataset):
             else:
                 nsample['force'] = nsample['force'][:self.obs_horizon,:]
         if self.segment:
-            nsample['segment'] = nsample['segment'][:self.obs_horizon].reshape(self.obs_horizon, 1) # 1 d
-            nsample['object'] = nsample['object'][:self.obs_horizon].reshape(self.obs_horizon, 1) # 1 d
-
+            nsample['language_command'] = nsample['language_command'][:self.obs_horizon, :] # Repeat for each timestep
         # if not self.single_view:
         #     # discard unused observations
         #     nsample['image2'] = nsample['image2'][:self.obs_horizon,:]

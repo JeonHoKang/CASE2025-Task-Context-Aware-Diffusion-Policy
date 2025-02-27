@@ -14,7 +14,7 @@ import hydra
 from omegaconf import DictConfig
 
 # Make sure Crop is all there
-@hydra.main(version_base=None, config_path="config", config_name="resnet_force_mod_no_encode")
+@hydra.main(version_base=None, config_path="config", config_name="resnet_force_mod_no_encode_modality")
 def train_Real_Robot(cfg: DictConfig):
     continue_training=  cfg.model_config.continue_training
     start_epoch = cfg.model_config.start_epoch
@@ -120,8 +120,7 @@ def train_Real_Robot(cfg: DictConfig):
                     nagent_pos = nbatch['agent_pos'][:,:diffusion.obs_horizon].to(device)
                     naction = nbatch['action'].to(device)
                     if segment:
-                        nsegment = nbatch['segment'][:,:diffusion.obs_horizon].to(device)
-                        nobject = nbatch['object'][:,:diffusion.obs_horizon].to(device)           
+                        nlanguage_command = nbatch['language_command'][:,:diffusion.obs_horizon]
                     ## Debug sequential data structure. It shoud be consecutive
                     # print(f"naction: {naction.cpu().numpy()}")
                     # imdata1 = nimage[0].cpu()
@@ -155,10 +154,13 @@ def train_Real_Robot(cfg: DictConfig):
                     elif encoder == "viT":
                         image_input = nimage
                     B = nagent_pos.shape[0]
+                    if segment:
+                        language_features = diffusion.nets['language_encoder'](nlanguage_command.reshape(-1,1))
+                        language_features = language_features.reshape(*nlanguage_command.shape[:2], -1)
                     if not cross_attn:
                         # encoder vision features
                         image_features = diffusion.nets['vision_encoder'](
-                            image_input)
+                            image_input, language_features)
                         image_features = image_features.reshape(
                             *nimage.shape[:2],-1)
                     # (B,obs_horizon,D)
@@ -185,7 +187,7 @@ def train_Real_Robot(cfg: DictConfig):
                     if force_mod and single_view and not cross_attn:
                         obs_features = torch.cat([image_features, force_feature, nagent_pos], dim=-1)
                         if segment:
-                            obs_features = torch.cat([obs_features, nsegment, nobject], dim=-1)
+                            obs_features = torch.cat([obs_features, language_features], dim=-1)
                     elif force_mod and not single_view and not cross_attn:
                         obs_features = torch.cat([image_features, image_features_second_view, force_feature, nagent_pos], dim=-1)
                     elif not force_mod and single_view:
@@ -274,3 +276,9 @@ def train_Real_Robot(cfg: DictConfig):
 
 if __name__ == "__main__":
     train_Real_Robot()
+
+        # segments = [segment_mapping[idx] for idx in segment_indices]
+        # objects = [object_mapping[idx] for idx in object_indices]
+        # # Convert integer arrays to string arrays
+        # language_commands = [f"{seg} {obj}" for seg, obj in zip(segments, objects)]
+        # normalized_train_data['language_command'] = np.array(language_commands)

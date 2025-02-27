@@ -731,7 +731,7 @@ class EvaluateRealRobot:
 
         load_pretrained = True
         if load_pretrained:
-            ckpt_path = "/home/lm-2023/jeon_team_ws/lbr-stack/src/DP_cable_disconnection/checkpoints/resnet_force_mod_no_encode_hybrid_nist_only_usb_no_segment.z_1000_20_DDIM_resnet34pre.pth"
+            ckpt_path = "DP_cable_disconnection/checkpoints/resnet_force_mod_no_encode_hybrid_nist_only_usb_no_segment.z_1000_20_DDIM_resnet34pre.pth"
             #   if not os.path.isfile(ckpt_path):qq
             #       id = "1XKpfNSlwYMGqaF5CncoFaLKCDTWoLAHf1&confirm=tn"q
             #       gdown.download(id=id, output=ckpt_path, quiet=False)    
@@ -767,7 +767,7 @@ class EvaluateRealRobot:
         force_mod = self.force_mod
         force_encode = self.force_encode
         cross_attn = self.cross_attn
-        with open('/home/lm-2023/jeon_team_ws/lbr-stack/src/DP_cable_disconnection/stats_nist_only_usb_no_segment.z_resnet_delta_with_force.json', 'r') as f:
+        with open('/home/lm-2023/jeon_team_ws/lbr-stack/src/DP_cable_disconnection/stats_nist_only_usb_no_segment.z_resnet_delta_with_force (1).json', 'r') as f:
             stats = json.load(f)
             if force_mod:
                 stats['agent_pos']['min'] = np.array(stats['agent_pos']['min'], dtype=np.float32)
@@ -823,15 +823,15 @@ class EvaluateRealRobot:
                     nforce_observation = torch.from_numpy(normalized_force_data).to(device, dtype=torch.float32)
                     force_feature = nforce_observation
 
-                gripper_pose = data_utils.normalize_data(agent_poses[:,-1].reshape(-1,1), stats=stats['agent_pos_gripper'])
+                gripper_pose = data_utils.normalize_gripper_data(agent_poses[:,-1].reshape(-1,1), stats=stats['agent_pos_gripper'])
                 processed_agent_poses = np.hstack((nagent_poses, agent_poses[:,3:9], gripper_pose))
                 nagent_poses = torch.from_numpy(processed_agent_poses).to(device, dtype=torch.float32)
                 object = np.array([1,1]).reshape(2,1)
+                # segment_in = int(input("segment : "))
+                segment_in = 0
+                if segment_in == 1:
+                    self.robotiq_gripper.send_gripper_command(0.8)
                 if self.segment:
-                    # segment_in = int(input("segment : "))
-                    segment_in = 0
-                    # if segment_in == 1:
-                    #     self.robotiq_gripper.send_gripper_command(0.8)
                     segment_arr = np.array([segment_in, segment_in]).reshape(2,1)
                     nobject = torch.from_numpy(object).to(device, dtype=torch.float32)
                     nsegment = torch.from_numpy(segment_arr).to(device, dtype=torch.float32)
@@ -919,13 +919,13 @@ class EvaluateRealRobot:
                 # (B, pred_horizon, action_dim)q
                 naction = naction[0]
                 action_pred = data_utils.unnormalize_data(naction[:,:3], stats=stats['action'])
-                gripper_pred = data_utils.unnormalize_data(naction[:,-1], stats=stats['action_gripper']).reshape(-1,1)
+                gripper_pred = data_utils.unnormalize_gripper_data(naction[:,-1], stats=stats['action_gripper']).reshape(-1,1)
                 action_pred = np.hstack((action_pred, naction[:,3:9], gripper_pred))
                 
                 # only take action_horizon number of actions
                 start = diffusion.obs_horizon - 1
                 
-                end = start + diffusion.action_horizon
+                end = start + diffusion.action_horizon - 2
                 action = action_pred[start:end,:] 
                 robot_action = [sublist[:-1] for sublist in action]
                 robot_action = delta_to_cumulative(robot_action)

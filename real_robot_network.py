@@ -17,6 +17,22 @@ import timm
 from torchvision import transforms
 from torchvision.datasets import ImageFolder
 from torch.utils.data import ConcatDataset
+from transformers import CLIPProcessor, CLIPModel
+import torch.nn.functional as F
+from torch.utils.data.dataloader import default_collate
+
+def custom_collate_fn(batch):
+    # Assuming batch is a list of dictionaries
+    collated_batch = {}
+    for key in batch[0]:
+        if isinstance(batch[0][key], list) and isinstance(batch[0][key][0], str):
+            # Collate lists of strings
+            collated_batch[key] = [item[key][0] for item in batch]
+        else:
+            # Use default collation for other types
+            collated_batch[key] = default_collate([item[key] for item in batch])
+    return collated_batch
+
 
 #@markdown ### **Network**
 #@markdown
@@ -129,7 +145,39 @@ class ForceEncoder(nn.Module):
         else:
             latent_vector = latent_vector.squeeze(1)
         return latent_vector
-    
+
+
+class TextEncoder(nn.Module):
+    def __init__(self, device=None):
+        super(TextEncoder, self).__init__()
+        
+        # Set device (default to GPU if available)
+        self.device = device if device else ("cuda" if torch.cuda.is_available() else "cpu")
+
+        # Load CLIP model and processor
+        self.model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32").to(self.device)
+        self.processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+
+    def forward(self, text):
+        """Takes a list of text inputs and returns their embeddings"""
+        # Process text input
+        text = text.reshape(-1).tolist()
+        inputs = self.processor(text=text, return_tensors="pt", padding="max_length").to(self.device)
+
+        # Get text embeddings
+        outputs = self.model.text_model(
+            return_dict=True,
+            output_hidden_states=True,
+            output_attentions=False,
+            **inputs,
+        )
+
+        # Extract and normalize the embeddings
+        embeddings = outputs.pooler_output  # Shape: (batch_size, hidden_dim)
+
+        return embeddings  # Shape: (batch_size, hidden_dim)
+
+
 class CrossAttentionFusion(nn.Module):
     def __init__(self, image_dim, force_dim, hidden_dim= None, batch_size = 48, obs_horizon = 2, force_encoder = "CNN", im_encoder = "resnet", train=True):
         super(CrossAttentionFusion, self).__init__()
@@ -483,8 +531,8 @@ def get_filename(input_string):
         return ""
 
 
-dataset_path = "nist_only_rotating_no_segment.zarr.zip"
-
+dataset_path = "/home/lm-2023/jeon_team_ws/lbr-stack/src/DP_cable_disconnection/nist_usb_dsub_w_segment.zarr.zip"
+# dataset_path = "/home/lm-2023/jeon_team_ws/lbr-stack/src/DP_cable_disconnection/nist_rotating_with_segment.zarr.zip"
 #@markdown ### **Network Demo**
 class DiffusionPolicy_Real:     
     def __init__(self,
@@ -506,13 +554,11 @@ class DiffusionPolicy_Real:
         action_horizon = 8
         lowdim_obs_dim = 10
         if segment:
-            lowdim_obs_dim += 2
-         
-
+            lowdim_obs_dim += 512
         #|o|o|                             observations: 2
         #| |a|a|a|a|a|a|a|a|               actions executed: 8
         #|p|p|p|p|p|p|p|p|p|p|p|p|p|p|p|p| actions predicted: 16
-        batch_size = 64
+        batch_size = 3
         Transformer_bool = None
         modality = "without_force"
         view = "dual_view"
@@ -538,7 +584,8 @@ class DiffusionPolicy_Real:
                                           force_encoder= force_encoder, 
                                           cross_attn=cross_attn,
                                           train=train)
-
+        if segment:
+            clip_encoder = TextEncoder()
         if cross_attn:
             if encoder == "viT":
                 cross_hidden_dim = 768
@@ -607,6 +654,19 @@ class DiffusionPolicy_Real:
                 augment = False,
                 segment = segment)
             # save training data statistics (min, max) for each dim
+            def collate_fn(batch):
+                batch_dict = {key: [sample[key] for sample in batch] for key in batch[0]}
+
+                # Convert image, agent_pos, force, action to tensors
+                for key in batch_dict:
+                    if key != "language_command":  # Avoid converting text data to tensor
+                        batch_dict[key] = torch.tensor(np.array(batch_dict[key]))  # Ensure shape consistency
+
+                # Handle language_command separately
+                if "language_command" in batch_dict:
+                    batch_dict["language_command"] = np.array(batch_dict["language_command"], dtype=object)
+
+                return batch_dict
 
 
             # create dataloader
@@ -615,9 +675,10 @@ class DiffusionPolicy_Real:
                 batch_size=batch_size,
                 num_workers=4,
                 shuffle=True,
+                collate_fn = collate_fn,
                 # accelerate cpu-gpu transfer
                 pin_memory=True,
-                # don't kill worker process afte each epoch
+                # don't kill worker process after each epoch
                 persistent_workers=True,
             )
 
@@ -708,8 +769,7 @@ class DiffusionPolicy_Real:
 
             print("batch['action'].shape", batch['action'].shape)
             if segment:
-                print("batch['segment'].shape", batch['segment'].shape)
-                print("batch['object'].shape", batch['object'].shape)
+                print("batch['language_command'].shape", batch['language_command'].shape)
 
 
             self.batch = batch
@@ -727,10 +787,17 @@ class DiffusionPolicy_Real:
             })
         elif single_view and force_mod and not force_encode and not cross_attn:
             # the final arch has 2 parts
-            nets = nn.ModuleDict({
-                'vision_encoder': vision_encoder,
-                'noise_pred_net': noise_pred_net
-            })
+            if segment:
+                nets = nn.ModuleDict({
+                    'vision_encoder': vision_encoder,
+                    'language_encoder': clip_encoder,
+                    'noise_pred_net': noise_pred_net, 
+                })
+            else:
+                nets = nn.ModuleDict({
+                    'vision_encoder': vision_encoder,
+                    'noise_pred_net': noise_pred_net
+                })
         elif single_view and force_encode:
             # the final arch has 2 parts
             nets = nn.ModuleDict({
@@ -877,22 +944,37 @@ def test():
     device = torch.device('cuda')
     # Standard ADAM optimizer
     # Note that EMA parametesr are not optimized
-    model = CrossAttentionFusion(image_input_shape, force_dim, hidden_dim, batch_size = batch_size, obs_horizon=obs_horizon, force_encoder = "MLP", im_encoder= "viT")
+
+#Encode an image:
+
+#Encode text descriptions
+
+    model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
+    processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
     model = model.to(device)
-    num_epochs = 10  # Set the number of epochs
-    nimage = batch['image'][:,:2].to(device)
-    nforce = batch['force'][:,:2].to(device)
-    for epoch in range(num_epochs):
-        # Example random input data for demonstration
-        # image_input = nimage.flatten(end_dim=1).to(device)  # Batch of 8 images
-        # force_input = nforce.flatten(end_dim=1).to(device)
-        # Batch of 8 force vectors
+    inputs = processor(text=['Approach USB', 'Grasp Bnc', 'Unlock Ethernet', 'Pull Dsub'], return_tensors="pt", padding="max_length")
+    inputs.to(device)
+    
+    with torch.no_grad():
+        outputs = model.text_model(
+                                return_dict=True,   
+                                output_hidden_states=True,
+                                output_attentions=False,
+                                **inputs,
+                            )
+        embedding1 = outputs.pooler_output[0]
+        embedding2 = outputs.pooler_output[2]
+        embedding1 = F.normalize(embedding1, p=2, dim=0)  # Use dim=0 for 1D tensor
+        embedding2 = F.normalize(embedding2, p=2, dim=0)  # Use dim=0 for 1D tensor
 
-        # Forward pass
-        latent_embedding = model(nimage, nforce)
+        cosine_sim = torch.matmul(embedding1, embedding2.T).item()
+
+        # Print similarity score
+        print(f"Cosine Similarity: {cosine_sim:.4f}")
+        # print(outputs)
 
 
-        print(f'Epoch [{epoch+1}/{num_epochs}. {latent_embedding.shape}')
+# test()
 ##TODO: Make sure that new CNN can work with the new architecture for CrossAttention
 # test()
 

@@ -4,6 +4,111 @@ import torch.nn as nn
 import torchvision
 
 
+class FiLM(nn.Module):
+    def __init__(self, clip_dim, feature_dim):
+        """
+        FiLM layer for feature-wise modulation using CLIP embeddings.
+        clip_dim: Dimension of CLIP text embeddings (e.g., 512 or 768)
+        feature_dim: Number of feature channels in ResNet to modulate
+        """
+        super(FiLM, self).__init__()
+
+        # Project CLIP embedding to match ResNet feature dimensions
+        self.cond_encoder = nn.Sequential(
+            nn.Mish(),
+            nn.Linear(clip_dim, feature_dim * 2),  # Predicts γ and β
+            nn.Unflatten(-1, (2, feature_dim, 1, 1))  # Reshapes for broadcasting
+        )
+
+    def forward(self, x, clip_emb):
+        """
+        x: Feature maps from ResNet layers -> Shape: (batch_size, channels, H, W)
+        clip_emb: CLIP text embedding -> Shape: (batch_size, clip_dim)
+        """
+        batch_size, channels, height, width = x.shape 
+        film_params = self.cond_encoder(clip_emb)  # Get γ and β from CLIP embedding
+        film_params = film_params.view(batch_size, 2, channels, 1, 1)  # Expand for broadcasting
+
+        gamma = film_params[:, 0, ...]  # First half is scale
+        beta = film_params[:, 1, ...]   # Second half is shift
+         
+        return (gamma * x) + beta  # Apply FiLM modulation
+    
+class FiLMResidualBlock(nn.Module):
+    def __init__(self, original_block, language_dim):
+        """
+        Wraps a ResNet residual block and applies FiLM before every BatchNorm layer.
+        """
+        super(FiLMResidualBlock, self).__init__()
+        self.original_block = original_block
+        feature_dim = original_block.conv1.out_channels  # Get feature dimension
+        self.film1 = FiLM(language_dim, feature_dim)
+        self.film2 = FiLM(language_dim, feature_dim)
+
+    def forward(self, x, lang_emb):
+        identity = x  # <-- Skip connection (original input)
+
+        # First conv layer with FiLM
+        out = self.original_block.conv1(x)
+        out = self.original_block.bn1(out)
+        out = self.film1(out, lang_emb)  # Apply FiLM
+        out = self.original_block.relu(out)
+
+        # Second conv layer with FiLM
+        out = self.original_block.conv2(out)
+        out = self.original_block.bn2(out)
+        out = self.film2(out, lang_emb)  # Apply FiLM
+
+        # Apply skip connection (residual sum)
+        if self.original_block.downsample is not None:
+            identity = self.original_block.downsample(x)  # Adjust dimensions if needed
+
+        out += identity  # <-- This is the skip connection!
+        out = self.original_block.relu(out)
+        return out
+    
+class ResNetWithFiLM(nn.Module):
+    def __init__(self, resnet, language_dim):
+        super(ResNetWithFiLM, self).__init__()
+        
+        self.language_dim = language_dim
+        self.conv1 = resnet.conv1
+        self.bn1 = resnet.bn1
+        self.relu = resnet.relu
+        self.maxpool = resnet.maxpool
+
+        # Wrap all ResNet layers with FiLM
+        self.layer1 = self.wrap_with_film(resnet.layer1, language_dim)
+        self.layer2 = self.wrap_with_film(resnet.layer2, language_dim)
+        self.layer3 = self.wrap_with_film(resnet.layer3, language_dim)
+        self.layer4 = self.wrap_with_film(resnet.layer4, language_dim)
+        self.feature_dim = language_dim  # ✅ Store the correct feature dimension
+
+        self.avgpool = resnet.avgpool
+        self.fc = nn.Linear(self.feature_dim, 512)  # ✅ Use stored feature_dim
+
+    def wrap_with_film(self, layer, language_dim):
+        return nn.ModuleList([FiLMResidualBlock(block, language_dim) for block in layer])
+
+    def forward(self, x, lang_emb):
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu(x)
+        x = self.maxpool(x)
+
+        # Apply FiLM-conditioned residual blocks
+        for block in self.layer1:
+            x = block(x, lang_emb)
+        for block in self.layer2:
+            x = block(x, lang_emb)
+        for block in self.layer3:
+            x = block(x, lang_emb)
+        for block in self.layer4:
+            x = block(x, lang_emb)
+
+        x = self.avgpool(x).flatten(1)
+        return self.fc(x)
+    
 class train_utils:
     def __init__(self):
         pass
@@ -14,7 +119,8 @@ class train_utils:
     #@markdown - `get_resnet` to initialize standard ResNet vision encoder
     #@markdown - `replace_bn_with_gn` to replace all BatchNorm layers with GroupNorm
 
-  
+
+    
     def get_resnet(self, name, weights="ResNet34_Weights.IMAGENET1K_V1", fine_tune = True, **kwargs):
         """
         name: resnet18, resnet34, resnet50
@@ -29,8 +135,9 @@ class train_utils:
         resnet = func(weights=weights, **kwargs)
         if fine_tune:
             resnet.requires_grad = True
-        resnet.fc = torch.nn.Identity()
-        return resnet
+        feature_dim = resnet.fc.in_features  # Store this before modifying fc
+        resnet.fc = torch.nn.Identity()  # Remove classification head
+        return ResNetWithFiLM(resnet, feature_dim)
 
     def get_r3m(self, name, **kwargs):
         """
