@@ -119,9 +119,7 @@ class train_utils:
     #@markdown - `get_resnet` to initialize standard ResNet vision encoder
     #@markdown - `replace_bn_with_gn` to replace all BatchNorm layers with GroupNorm
 
-
-    
-    def get_resnet(self, name, weights="ResNet34_Weights.IMAGENET1K_V1", fine_tune = True, **kwargs):
+    def get_resnet_FILM(self, name, weights="ResNet34_Weights.IMAGENET1K_V1", fine_tune = True, **kwargs):
         """
         name: resnet18, resnet34, resnet50
         weights: "IMAGENET1K_V1", "r3m"
@@ -138,6 +136,23 @@ class train_utils:
         feature_dim = resnet.fc.in_features  # Store this before modifying fc
         resnet.fc = torch.nn.Identity()  # Remove classification head
         return ResNetWithFiLM(resnet, feature_dim)
+    
+    def get_resnet(self, name, weights="ResNet34_Weights.IMAGENET1K_V1", fine_tune = True, **kwargs):
+        """
+        name: resnet18, resnet34, resnet50
+        weights: "IMAGENET1K_V1", "r3m"
+        """
+        # load r3m weights
+        if (weights == "r3m") or (weights == "R3M"):
+            return self.get_r3m(name=name, **kwargs)
+
+        func = getattr(torchvision.models, name)
+        
+        resnet = func(weights=weights, **kwargs)
+        if fine_tune:
+            resnet.requires_grad = True
+        resnet.fc = torch.nn.Identity()  # Remove classification head
+        return resnet
 
     def get_r3m(self, name, **kwargs):
         """

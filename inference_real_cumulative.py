@@ -731,7 +731,7 @@ class EvaluateRealRobot:
 
         load_pretrained = True
         if load_pretrained:
-            ckpt_path = "DP_cable_disconnection/checkpoints/resnet_force_mod_no_encode_hybrid_nist_only_usb_no_segment.z_1000_20_DDIM_resnet34pre.pth"
+            ckpt_path = "/home/lm-2023/jeon_team_ws/lbr-stack/src/DP_cable_disconnection/checkpoints/resnet_force_mod_no_encode_hybrid_segment_nist_usb_dsub_w_segment.z_1400_20_DDIM_resnet34pre.pth"
             #   if not os.path.isfile(ckpt_path):qq
             #       id = "1XKpfNSlwYMGqaF5CncoFaLKCDTWoLAHf1&confirm=tn"q
             #       gdown.download(id=id, output=ckpt_path, quiet=False)    
@@ -753,6 +753,7 @@ class EvaluateRealRobot:
         import time
         def normalize(vec):
             return vec / np.linalg.norm(vec)
+        
         diffusion = self.diffusion
         max_steps = self.max_steps
         device = self.device
@@ -767,7 +768,10 @@ class EvaluateRealRobot:
         force_mod = self.force_mod
         force_encode = self.force_encode
         cross_attn = self.cross_attn
-        with open('/home/lm-2023/jeon_team_ws/lbr-stack/src/DP_cable_disconnection/stats_nist_only_usb_no_segment.z_resnet_delta_with_force (1).json', 'r') as f:
+        
+        segment_mapping = {0: "Approach", 1: "Grasp", 2: "Unlock", 3: "Pull", 4: "Ungrasp"}
+        object_mapping = {0: "USB", 1: "Dsub", 2: "Ethernet", 3: "Bnc", 4: "Terminal Block"}
+        with open('/home/lm-2023/jeon_team_ws/lbr-stack/src/DP_cable_disconnection/stats_nist_usb_dsub_w_segment.z_resnet_delta_with_force.json', 'r') as f:
             stats = json.load(f)
             if force_mod:
                 stats['agent_pos']['min'] = np.array(stats['agent_pos']['min'], dtype=np.float32)
@@ -826,32 +830,40 @@ class EvaluateRealRobot:
                 gripper_pose = data_utils.normalize_gripper_data(agent_poses[:,-1].reshape(-1,1), stats=stats['agent_pos_gripper'])
                 processed_agent_poses = np.hstack((nagent_poses, agent_poses[:,3:9], gripper_pose))
                 nagent_poses = torch.from_numpy(processed_agent_poses).to(device, dtype=torch.float32)
-                object = np.array([1,1]).reshape(2,1)
-                # segment_in = int(input("segment : "))
-                segment_in = 0
-                if segment_in == 1:
-                    self.robotiq_gripper.send_gripper_command(0.8)
+                object_indices = np.array([1,1])
+                segment_in = int(input("segment : "))
+                # segment_in = 0
+                # if segment_in == 1:
+                #     self.robotiq_gripper.send_gripper_command(0.8)
                 if self.segment:
-                    segment_arr = np.array([segment_in, segment_in]).reshape(2,1)
-                    nobject = torch.from_numpy(object).to(device, dtype=torch.float32)
-                    nsegment = torch.from_numpy(segment_arr).to(device, dtype=torch.float32)
+                    segment_arr = np.array([segment_in, segment_in])
+
+                segments = [segment_mapping[idx] for idx in segment_arr]
+                objects = [object_mapping[idx] for idx in object_indices]
+                # Convert integer arrays to string arrays
+                language_commands = [f"{seg} {obj}" for seg, obj in zip(segments, objects)]
+                language_commands = np.array(language_commands, dtype=object).reshape(-1,1)
+                
                 # infer action
                 with torch.no_grad():
                     # get image features
+                    if self.segment:
+                        language_features = ema_nets['language_encoder'](language_commands)
                     if not self.single_view:
                         image_features_second_view = ema_nets['vision_encoder2'](nimages) # previously trained one vision_encoder 1
                     # (2,512)
                     if not cross_attn:
-                        image_features = ema_nets['vision_encoder'](nimages_second_view)
+                        image_features = ema_nets['vision_encoder'](nimages_second_view, language_features)
                     if force_encode and not cross_attn:
                         force_feature = ema_nets['force_encoder'](nforce_observation)
                     elif not force_encode and cross_attn:
                         joint_features = ema_nets['cross_attn_encoder'](nimages_second_view, nforce_observation)
+
                     # concat with low-dim observations
                     if force_mod and single_view and not cross_attn:
                         obs_features = torch.cat([image_features, force_feature, nagent_poses], dim=-1)
                         if self.segment:
-                            obs_features = torch.cat([obs_features, nsegment, nobject], dim=-1)
+                            obs_features = torch.cat([obs_features, language_features], dim=-1)
                     elif force_mod and not single_view and not cross_attn:
                         obs_features = torch.cat([image_features_second_view, image_features, force_feature, nagent_poses], dim=-1)
                     elif not force_mod and single_view:
@@ -925,7 +937,7 @@ class EvaluateRealRobot:
                 # only take action_horizon number of actions
                 start = diffusion.obs_horizon - 1
                 
-                end = start + diffusion.action_horizon - 2
+                end = start + diffusion.action_horizon - 3
                 action = action_pred[start:end,:] 
                 robot_action = [sublist[:-1] for sublist in action]
                 robot_action = delta_to_cumulative(robot_action)
@@ -1006,7 +1018,7 @@ class EvaluateRealRobot:
         # # Export to Excel file
         # excel_filename = "position_quaternion_data.xlsx"
         # df.to_excel(excel_filename, index=False)
-@hydra.main(version_base=None, config_path="config", config_name="resnet_force_mod_no_encode")
+@hydra.main(version_base=None, config_path="config", config_name="resnet_force_mod_no_encode_modality")
 def main(cfg: DictConfig):
     # Max steps will dicate how long the inference duration is going to be so it is very important
     # Initialize RealSense pipelines for both cameras

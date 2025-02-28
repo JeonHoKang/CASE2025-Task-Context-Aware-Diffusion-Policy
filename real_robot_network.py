@@ -600,9 +600,15 @@ class DiffusionPolicy_Real:
                                                  train = train)
         else:
             if encoder == "resnet":
-                print("resnet")
-                vision_encoder = train_utils().get_resnet('resnet34')
-                vision_encoder = train_utils().replace_bn_with_gn(vision_encoder)
+                if segment:
+                    print("resnet WITH film")
+                    vision_encoder = train_utils().get_resnet_FILM('resnet34')
+                    vision_encoder = train_utils().replace_bn_with_gn(vision_encoder)
+
+                else:
+                    print("resnet")
+                    vision_encoder = train_utils().get_resnet('resnet34')
+                    vision_encoder = train_utils().replace_bn_with_gn(vision_encoder)
 
             elif encoder == "Transformer":
                 Transformer_bool = True

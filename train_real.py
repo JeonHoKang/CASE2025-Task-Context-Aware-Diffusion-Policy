@@ -158,9 +158,14 @@ def train_Real_Robot(cfg: DictConfig):
                         language_features = diffusion.nets['language_encoder'](nlanguage_command.reshape(-1,1))
                         language_features = language_features.reshape(*nlanguage_command.shape[:2], -1)
                     if not cross_attn:
-                        # encoder vision features
-                        image_features = diffusion.nets['vision_encoder'](
-                            image_input, language_features)
+                        if segment:
+                            # encoder vision features
+                            image_features = diffusion.nets['vision_encoder'](
+                                image_input, language_features)
+                        else:
+                            # encoder vision features
+                            image_features = diffusion.nets['vision_encoder'](
+                                image_input)
                         image_features = image_features.reshape(
                             *nimage.shape[:2],-1)
                     # (B,obs_horizon,D)
@@ -186,8 +191,8 @@ def train_Real_Robot(cfg: DictConfig):
                     # (B,obs_horizon,D)
                     if force_mod and single_view and not cross_attn:
                         obs_features = torch.cat([image_features, force_feature, nagent_pos], dim=-1)
-                        if segment:
-                            obs_features = torch.cat([obs_features, language_features], dim=-1)
+                        # if segment:
+                        #     obs_features = torch.cat([obs_features, language_features], dim=-1)
                     elif force_mod and not single_view and not cross_attn:
                         obs_features = torch.cat([image_features, image_features_second_view, force_feature, nagent_pos], dim=-1)
                     elif not force_mod and single_view:
