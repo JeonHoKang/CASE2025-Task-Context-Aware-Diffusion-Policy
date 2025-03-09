@@ -7,7 +7,6 @@ from tqdm.auto import tqdm
 import os
 from real_robot_network import DiffusionPolicy_Real
 from data_util import data_utils
-import cv2
 from train_utils import train_utils
 import pyrealsense2 as rs
 import os
@@ -536,6 +535,43 @@ class EvaluateRealRobot:
             color_frame_B = aligned_frames_B.get_color_frame()
             color_image_B = np.asanyarray(color_frame_B.get_data())
             color_image_B.astype(np.float32)
+            # Get the image dimensions
+            height_B, width_B, _ = color_image_B.shape
+
+            # Define the center point
+            center_x, center_y = width_B // 2, height_B // 2
+            if self.encoder == "Transformer":
+                print("crop to 224 by 224")
+                crop_width, crop_height = 224, 224
+            else:
+                # Define the crop size
+                crop_width, crop_height = 640, 480
+            # Calculate the top-left corner of the crop box
+            x1 = max(center_x - crop_width // 2, 0)
+            y1 = max(center_y - crop_height // 2, 0)
+
+            # Calculate the bottom-right corner of the crop box
+            x2 = min(center_x + crop_width // 2, width_B)
+            y2 = min(center_y + crop_height // 2, height_B)
+            cropped_image_B = color_image_B[y1:y2, x1:x2]
+            
+            crop_again_height,crop_again_width  = 224, 224
+            # Convert BGR to RGB for Matplotlib visualization
+            cropped_image_B = np.transpose(cropped_image_B, (2,0,1))
+            C,H,W = cropped_image_B.shape
+
+            # Calculate the center + 20 only when using 98 and 124 is -20 for start_x only
+            # Calculate start positions correctly
+            start_y = max((H - crop_again_height + 100) // 2, 0)
+            start_x = max((W - crop_again_width + 360) // 2, 0)
+            # start_y = (H - crop_height) // 2
+            # start_x = (W - crop_width - 20) // 2  
+            # Perform cropping
+            cropped_image_B = cropped_image_B[:, start_y:start_y + crop_again_height, start_x:start_x + crop_again_width]
+            cropped_image_B = np.transpose(cropped_image_B, (1,2,0))
+
+            image_B_rgb = cv2.cvtColor(cropped_image_B, cv2.COLOR_BGR2RGB)
+            image_B_rgb = cv2.resize(image_B_rgb, (98, 98))
         else:    
             frames_A = pipeline_A.wait_for_frames()
             aligned_frames_A = align_A.process(frames_A)
@@ -548,32 +584,84 @@ class EvaluateRealRobot:
             color_frame_B = aligned_frames_B.get_color_frame()
             color_image_B = np.asanyarray(color_frame_B.get_data())
             color_image_B.astype(np.float32)
-        
-            image_A = cv2.resize(color_image_A, (320, 240), interpolation=cv2.INTER_AREA)
-            image_A_rgb = cv2.cvtColor(image_A, cv2.COLOR_BGR2RGB)
 
-        # Get the image dimensions
-        height_B, width_B, _ = color_image_B.shape
+            height_A, width_A, _ = color_image_A.shape
 
-        # Define the center point
-        center_x, center_y = width_B // 2, height_B // 2
-        if self.encoder == "Transformer":
-            print("crop to 224 by 224")
-            crop_width, crop_height = 224, 224
-        else:
-            # Define the crop size
-            crop_width, crop_height = 320, 240
-        # Calculate the top-left corner of the crop box
-        x1 = max(center_x - crop_width // 2, 0)
-        y1 = max(center_y - crop_height // 2, 0)
+            # Define the center point
+            center_x_A, center_y_A = width_A // 2, height_A // 2
+            if self.encoder == "Transformer":
+                print("crop to 224 by 224")
+                crop_width, crop_height = 224, 224
+            else:
+                # Define the crop size
+                crop_width, crop_height = 640, 480
+            # Calculate the top-left corner of the crop box
+            x1_A = max(center_x - crop_width // 2, 0)
+            y1_A = max(center_y - crop_height // 2, 0)
 
-        # Calculate the bottom-right corner of the crop box
-        x2 = min(center_x + crop_width // 2, width_B)
-        y2 = min(center_y + crop_height // 2, height_B)
-        cropped_image_B = color_image_B[y1:y2, x1:x2]
+            # Calculate the bottom-right corner of the crop box
+            x2_A = min(center_x + crop_width // 2, width_A)
+            y2_A = min(center_y + crop_height // 2, height_A)
+            cropped_image_A = color_image_A[y1_A:y2_A, x1_A:x2_A]
+            
+            crop_again_height_A,crop_again_width_A  = 224, 224
+            # Convert BGR to RGB for Matplotlib visualization
+            cropped_image_A = np.transpose(cropped_image_A, (2,0,1))
+            C,H_A,W_A = cropped_image_A.shape
 
-        # Convert BGR to RGB for Matplotlib visualization
-        image_B_rgb = cv2.cvtColor(cropped_image_B, cv2.COLOR_BGR2RGB)
+            # Calculate the center + 20 only when using 98 and 124 is -20 for start_x only
+            # Calculate start positions correctly
+            start_y_A = max((H_A - crop_again_height_A) // 2, 0)
+            start_x_A = max((W_A - crop_again_width_A) // 2, 0)
+            # start_y = (H - crop_height) // 2
+            # start_x = (W - crop_width - 20) // 2  
+            # Perform cropping
+            cropped_image_A = cropped_image_A[:, start_y_A:start_y_A + crop_again_height_A, start_x_A:start_x_A + crop_again_width_A]
+            cropped_image_A = np.transpose(cropped_image_A, (1,2,0))
+
+            image_A_rgb = cv2.cvtColor(cropped_image_A, cv2.COLOR_BGR2RGB)
+            image_A_rgb = cv2.resize(image_A_rgb, (98, 98))
+
+            ############### MULTIPLE VIEW ######
+            height_B, width_B, _ = color_image_B.shape
+
+            # Define the center point
+            center_x, center_y = width_B // 2, height_B // 2
+            if self.encoder == "Transformer":
+                print("crop to 224 by 224")
+                crop_width, crop_height = 224, 224
+            else:
+                # Define the crop size
+                crop_width, crop_height = 640, 480
+            # Calculate the top-left corner of the crop box
+            x1 = max(center_x - crop_width // 2, 0)
+            y1 = max(center_y - crop_height // 2, 0)
+
+            # Calculate the bottom-right corner of the crop box
+            x2 = min(center_x + crop_width // 2, width_B)
+            y2 = min(center_y + crop_height // 2, height_B)
+            cropped_image_B = color_image_B[y1:y2, x1:x2]
+            
+            crop_again_height,crop_again_width  = 224, 224
+            # Convert BGR to RGB for Matplotlib visualization
+            cropped_image_B = np.transpose(cropped_image_B, (2,0,1))
+            C,H,W = cropped_image_B.shape
+
+            # Calculate the center + 20 only when using 98 and 124 is -20 for start_x only
+            # Calculate start positions correctly
+            start_y = max((H - crop_again_height + 100) // 2, 0)
+            start_x = max((W - crop_again_width + 360) // 2, 0)
+            # start_y = (H - crop_height) // 2
+            # start_x = (W - crop_width - 20) // 2  
+            # Perform cropping
+            cropped_image_B = cropped_image_B[:, start_y:start_y + crop_again_height, start_x:start_x + crop_again_width]
+            cropped_image_B = np.transpose(cropped_image_B, (1,2,0))
+
+            image_B_rgb = cv2.cvtColor(cropped_image_B, cv2.COLOR_BGR2RGB)
+            image_B_rgb = cv2.resize(image_B_rgb, (98, 98))
+
+
+
          ### Visualizing purposes
         # import nodes
         # print(f'current agent position, {agent_pos}')
@@ -585,13 +673,16 @@ class EvaluateRealRobot:
         rot_m_agent = quat_to_rot_m(agent_rotation)
         rot_6d = mat_to_rot6d(rot_m_agent)
         agent_pos_10d = np.hstack((agent_position, rot_6d, gripper_pos))
+
         # import matplotlib.pyplot as plt
-        # # plt.imshow(image_A_rgb)
-        # # # plt.show()
-        # plt.imshow(image_B_rgb)
+        plt.imshow(image_A_rgb)
         # plt.show()
+        plt.imshow(image_B_rgb)
+        plt.show()
         # Reshape to (C, H, W)
+        image_A = np.transpose(image_A_rgb, (2, 0, 1))
         image_B = np.transpose(image_B_rgb, (2, 0, 1))
+
         if not single_view:
             image_A = np.transpose(image_A_rgb, (2, 0, 1))
             obs['image_A'] = image_A
@@ -687,7 +778,7 @@ class EvaluateRealRobot:
                 print(gripper_action)
                 delta_gripper = abs(current_gripper_pos - gripper_action[position_idx])
                 # print(f'delta gripper : {delta_gripper}')
-                scaled_command = float(gripper_action[position_idx]*1.4)
+                scaled_command = float(gripper_action[position_idx]*1.0)
                 if scaled_command > 0.8:
                     scaled_command = 0.8
                 self.robotiq_gripper.send_gripper_command(scaled_command)
@@ -731,7 +822,7 @@ class EvaluateRealRobot:
 
         load_pretrained = True
         if load_pretrained:
-            ckpt_path = "/home/lm-2023/jeon_team_ws/lbr-stack/src/DP_cable_disconnection/checkpoints/resnet_force_mod_no_encode_hybrid_segment_nist_usb_dsub_w_segment.z_1400_20_DDIM_resnet34pre.pth"
+            ckpt_path = "/home/lm-2023/jeon_team_ws/lbr-stack/src/DP_cable_disconnection/checkpoints/resnet_force_mod_no_encode_hybrid_segment_nist_delta_99_remake.z_1000_20_DDIM_resnet34pre (1).pth"
             #   if not os.path.isfile(ckpt_path):qq
             #       id = "1XKpfNSlwYMGqaF5CncoFaLKCDTWoLAHf1&confirm=tn"q
             #       gdown.download(id=id, output=ckpt_path, quiet=False)    
@@ -771,7 +862,7 @@ class EvaluateRealRobot:
         
         segment_mapping = {0: "Approach", 1: "Grasp", 2: "Unlock", 3: "Pull", 4: "Ungrasp"}
         object_mapping = {0: "USB", 1: "Dsub", 2: "Ethernet", 3: "Bnc", 4: "Terminal Block"}
-        with open('/home/lm-2023/jeon_team_ws/lbr-stack/src/DP_cable_disconnection/stats_nist_usb_dsub_w_segment.z_resnet_delta_with_force.json', 'r') as f:
+        with open('stats_nist_delta_99_remake.z_resnet_delta_with_force (3).json', 'r') as f:
             stats = json.load(f)
             if force_mod:
                 stats['agent_pos']['min'] = np.array(stats['agent_pos']['min'], dtype=np.float32)
@@ -830,7 +921,7 @@ class EvaluateRealRobot:
                 gripper_pose = data_utils.normalize_gripper_data(agent_poses[:,-1].reshape(-1,1), stats=stats['agent_pos_gripper'])
                 processed_agent_poses = np.hstack((nagent_poses, agent_poses[:,3:9], gripper_pose))
                 nagent_poses = torch.from_numpy(processed_agent_poses).to(device, dtype=torch.float32)
-                object_indices = np.array([1,1])
+                object_indices = np.array([0,0])
                 segment_in = int(input("segment : "))
                 # segment_in = 0
                 # if segment_in == 1:
@@ -843,7 +934,7 @@ class EvaluateRealRobot:
                 # Convert integer arrays to string arrays
                 language_commands = [f"{seg} {obj}" for seg, obj in zip(segments, objects)]
                 language_commands = np.array(language_commands, dtype=object).reshape(-1,1)
-                
+                print(language_commands)
                 # infer action
                 with torch.no_grad():
                     # get image features
@@ -858,7 +949,6 @@ class EvaluateRealRobot:
                         force_feature = ema_nets['force_encoder'](nforce_observation)
                     elif not force_encode and cross_attn:
                         joint_features = ema_nets['cross_attn_encoder'](nimages_second_view, nforce_observation)
-
                     # concat with low-dim observations
                     if force_mod and single_view and not cross_attn:
                         obs_features = torch.cat([image_features, force_feature, nagent_poses], dim=-1)
@@ -937,7 +1027,7 @@ class EvaluateRealRobot:
                 # only take action_horizon number of actions
                 start = diffusion.obs_horizon - 1
                 
-                end = start + diffusion.action_horizon - 3
+                end = start + diffusion.action_horizon
                 action = action_pred[start:end,:] 
                 robot_action = [sublist[:-1] for sublist in action]
                 robot_action = delta_to_cumulative(robot_action)

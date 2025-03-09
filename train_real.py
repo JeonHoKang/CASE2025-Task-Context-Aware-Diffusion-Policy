@@ -14,7 +14,7 @@ import hydra
 from omegaconf import DictConfig
 
 # Make sure Crop is all there
-@hydra.main(version_base=None, config_path="config", config_name="resnet_force_mod_no_encode_modality")
+@hydra.main(version_base=None, config_path="config", config_name="resnet_force_mod_no_encode_modality dualview")
 def train_Real_Robot(cfg: DictConfig):
     continue_training=  cfg.model_config.continue_training
     start_epoch = cfg.model_config.start_epoch
@@ -77,7 +77,7 @@ def train_Real_Robot(cfg: DictConfig):
     # Note that EMA parametesr are not optimized
     optimizer = torch.optim.AdamW(
         params=diffusion.nets.parameters(),
-        lr=1e-4, weight_decay=1e-6)
+        lr=4e-4, weight_decay=1e-6)
 
     # Cosine LR schedule with linear warmup
     lr_scheduler = get_scheduler(
@@ -121,13 +121,14 @@ def train_Real_Robot(cfg: DictConfig):
                     naction = nbatch['action'].to(device)
                     if segment:
                         nlanguage_command = nbatch['language_command'][:,:diffusion.obs_horizon]
-                    ## Debug sequential data structure. It shoud be consecutive
+                    # print(f'nlangauge: {nlanguage_command[0]}')
+                    # # Debug sequential data structure. It shoud be consecutive
                     # print(f"naction: {naction.cpu().numpy()}")
                     # imdata1 = nimage[0].cpu()
                     # imdata1 = imdata1.numpy()
                     # print(f"shape of the image data:", imdata1.shape)
-                    # # imdata2 = nimage_second_view[0].cpu()
-                    # # imdata2 = imdata2.numpy()
+                    # imdata2 = nimage_second_view[0].cpu()
+                    # imdata2 = imdata2.numpy()
           
                     # fig, axes = plt.subplots(1, 2, figsize=(10, 5))
                     # for j in range(2):
@@ -137,17 +138,19 @@ def train_Real_Robot(cfg: DictConfig):
                     # #     # Plot the image on the corresponding subplot
                     #     axes[j].imshow(img)
                     #     axes[j].axis('off')  # Hide the axes
-                        # Show the plot
-                    # plt.show()  
-                    # For double realsense config only
+                    #     # Show the plot
+                    # # plt.show()  
+
+                    # # For double realsense config only
                     # for j in range(2):
                     #     # Convert the 3x96x96 tensor to a 96x96x3 image (for display purposes)
-                    #     # img2 = imdata2[j].transpose(1, 2, 0)
+                    #     img2 = imdata2[j].transpose(1, 2, 0)
 
                     #     # Plot the image on the corresponding subplot
                     #     axes[j].imshow(img2)
                     #     axes[j].axis('off')  # Hide the axes
-                        # Show the plot
+                    #     # Show the plot
+                    # plt.show()  
 
                     if encoder == "resnet":
                         image_input = nimage.flatten(end_dim=1)
@@ -195,6 +198,8 @@ def train_Real_Robot(cfg: DictConfig):
                         #     obs_features = torch.cat([obs_features, language_features], dim=-1)
                     elif force_mod and not single_view and not cross_attn:
                         obs_features = torch.cat([image_features, image_features_second_view, force_feature, nagent_pos], dim=-1)
+                        if segment:
+                            obs_features = torch.cat([obs_features, language_features], dim=-1)
                     elif not force_mod and single_view:
                         obs_features = torch.cat([image_features, nagent_pos], dim=-1)
                     elif not force_mod and not single_view:

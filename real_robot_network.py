@@ -531,7 +531,7 @@ def get_filename(input_string):
         return ""
 
 
-dataset_path = "/home/lm-2023/jeon_team_ws/lbr-stack/src/DP_cable_disconnection/nist_usb_dsub_w_segment.zarr.zip"
+dataset_path = "nist_new.zarr.zip"
 # dataset_path = "/home/lm-2023/jeon_team_ws/lbr-stack/src/DP_cable_disconnection/nist_rotating_with_segment.zarr.zip"
 #@markdown ### **Network Demo**
 class DiffusionPolicy_Real:     
@@ -558,7 +558,7 @@ class DiffusionPolicy_Real:
         #|o|o|                             observations: 2
         #| |a|a|a|a|a|a|a|a|               actions executed: 8
         #|p|p|p|p|p|p|p|p|p|p|p|p|p|p|p|p| actions predicted: 16
-        batch_size = 16
+        batch_size = 24
         Transformer_bool = None
         modality = "without_force"
         view = "dual_view"
@@ -637,6 +637,7 @@ class DiffusionPolicy_Real:
         # observation feature has 514 dims in total per step
         if force_mod and not cross_attn:
             obs_dim = vision_feature_dim + force_feature_dim  + lowdim_obs_dim
+            print(f"Observation conditioning dim: {obs_dim}")
         elif force_mod and cross_attn:
             obs_dim = vision_feature_dim  + lowdim_obs_dim
         else:            
@@ -804,6 +805,20 @@ class DiffusionPolicy_Real:
                     'vision_encoder': vision_encoder,
                     'noise_pred_net': noise_pred_net
                 })
+        elif not single_view and force_mod and not force_encode and not cross_attn:
+            # the final arch has 2 parts
+            if segment:
+                nets = nn.ModuleDict({
+                    'vision_encoder': vision_encoder,
+                    'language_encoder': clip_encoder,
+                    'vision_encoder2': vision_encoder2,
+                    'noise_pred_net': noise_pred_net, 
+                })
+            else:
+                nets = nn.ModuleDict({
+                    'vision_encoder': vision_encoder,
+                    'noise_pred_net': noise_pred_net
+                })
         elif single_view and force_encode:
             # the final arch has 2 parts
             nets = nn.ModuleDict({
@@ -890,33 +905,33 @@ class DiffusionPolicy_Real:
 def test():
     # create dataset from file
     obs_horizon = 2 
-    dataset = RealRobotDataSet(
-        dataset_path=dataset_path,
-        pred_horizon=16,
-        obs_horizon=obs_horizon,
-        action_horizon=8,
-        Transformer= False,
-        force_mod = True,
-        single_view= True
-    )
-    # save training data statistics (min, max) for each dim
-    stats = dataset.stats
+    # dataset = RealRobotDataSet(
+    #     dataset_path=dataset_path,
+    #     pred_horizon=16,
+    #     obs_horizon=obs_horizon,
+    #     action_horizon=8,
+    #     Transformer= False,
+    #     force_mod = True,
+    #     single_view= True
+    # )
+    # # save training data statistics (min, max) for each dim
+    # stats = dataset.stats
 
-    batch_size = 124
-    # create dataloader
-    dataloader = torch.utils.data.DataLoader(
-        dataset,
-        batch_size=batch_size,
-        num_workers=4,
-        shuffle=True,
-        # accelerate cpu-gpu transfer
-        pin_memory=True,
-        # don't kill worker process afte each epoch
-        persistent_workers=True
-    )
+    # batch_size = 124
+    # # create dataloader
+    # dataloader = torch.utils.data.DataLoader(
+    #     dataset,
+    #     batch_size=batch_size,
+    #     num_workers=4,
+    #     shuffle=True,
+    #     # accelerate cpu-gpu transfer
+    #     pin_memory=True,
+    #     # don't kill worker process afte each epoch
+    #     persistent_workers=True
+    # )
     
-    batch = next(iter(dataloader))
-    print("batch['image'].shape:", batch['image'].shape)
+    # batch = next(iter(dataloader))
+    # print("batch['image'].shape:", batch['image'].shape)
 
     # ### For debugging purposes uncomment
     # import matplotlib.pyplot as plt
@@ -939,9 +954,9 @@ def test():
     # # Show the plot
     # plt.show()  
     
-    print("batch['agent_pos'].shape:", batch['agent_pos'].shape)    
-    print("batch['force'].shape:", batch['force'].shape)
-    print("batch['action'].shape", batch['action'].shape)
+    # print("batch['agent_pos'].shape:", batch['agent_pos'].shape)    
+    # print("batch['force'].shape:", batch['force'].shape)
+    # print("batch['action'].shape", batch['action'].shape)
     image_input_shape  = (3, 224, 224)
     force_dim = 6
     hidden_dim = 768
@@ -958,7 +973,7 @@ def test():
     model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
     processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
     model = model.to(device)
-    inputs = processor(text=['Approach USB', 'Grasp Bnc', 'Unlock Ethernet', 'Pull Dsub'], return_tensors="pt", padding="max_length")
+    inputs = processor(text=['Approach Bnc', 'Grasp Bnc', 'Unlock Bnc', 'Approach USB'], return_tensors="pt", padding="max_length")
     inputs.to(device)
     
     with torch.no_grad():
@@ -969,7 +984,7 @@ def test():
                                 **inputs,
                             )
         embedding1 = outputs.pooler_output[0]
-        embedding2 = outputs.pooler_output[2]
+        embedding2 = outputs.pooler_output[3]
         embedding1 = F.normalize(embedding1, p=2, dim=0)  # Use dim=0 for 1D tensor
         embedding2 = F.normalize(embedding2, p=2, dim=0)  # Use dim=0 for 1D tensor
 
