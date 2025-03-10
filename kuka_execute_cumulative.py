@@ -29,7 +29,7 @@ class KukaMotionPlanning(Node):
             # Create a JointTrajectoryPoint and assign positions
             point = JointTrajectoryPoint()
             point.positions = joint_values.position
-            point.time_from_start = rclpy.duration.Duration(seconds=(i + 1) * 0.15).to_msg()  # Increment time for each point
+            point.time_from_start = rclpy.duration.Duration(seconds=(i + 1) * 0.2).to_msg()  # Increment time for each point
 
             # Add the point to the trajectory
             trajectory_msg.points.append(point)

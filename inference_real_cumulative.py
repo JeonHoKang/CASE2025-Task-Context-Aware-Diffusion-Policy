@@ -388,6 +388,8 @@ class EvaluateRealRobot:
         _ = diffusion.nets.to(device)
         # Initialize realsense camera
         pipeline_B = rs.pipeline()
+        pipeline_A = rs.pipeline()
+
         camera_context = rs.context()
         camera_devices = camera_context.query_devices()
         self.diffusion = diffusion
@@ -395,15 +397,14 @@ class EvaluateRealRobot:
         self.cross_attn = cross_attn
         if not single_view:
             if len(camera_devices) < 2:
-                pipeline_A = rs.pipeline()
-
                 raise RuntimeError("Two cameras are required, but fewer were detected.")
+            else:
                 # Initialize Camera A
-                serial_A = camera_devices[0].get_info(rs.camera_info.serial_number)
+                serial_A = camera_devices[1].get_info(rs.camera_info.serial_number)
                 # Configure Camera A
                 config_A = rs.config()
                 config_A.enable_device(serial_A)
-                config_A.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
+                config_A.enable_stream(rs.stream.color, 640, 360, rs.format.bgr8, 30)
                 align_A = rs.align(rs.stream.color)
                 self.pipeline_A = pipeline_A
                 self.align_A = align_A
@@ -418,7 +419,7 @@ class EvaluateRealRobot:
         # Configure Camera B
         config_B = rs.config()
         config_B.enable_device(serial_B)
-        config_B.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
+        config_B.enable_stream(rs.stream.color, 640, 360, rs.format.bgr8, 30)
 
         # Start pipelines
         align_B = rs.align(rs.stream.color)
@@ -543,27 +544,24 @@ class EvaluateRealRobot:
             if self.encoder == "Transformer":
                 print("crop to 224 by 224")
                 crop_width, crop_height = 224, 224
-            else:
-                # Define the crop size
-                crop_width, crop_height = 640, 480
-            # Calculate the top-left corner of the crop box
-            x1 = max(center_x - crop_width // 2, 0)
-            y1 = max(center_y - crop_height // 2, 0)
+                # Calculate the top-left corner of the crop box
+                x1 = max(center_x - crop_width // 2, 0)
+                y1 = max(center_y - crop_height // 2, 0)
 
-            # Calculate the bottom-right corner of the crop box
-            x2 = min(center_x + crop_width // 2, width_B)
-            y2 = min(center_y + crop_height // 2, height_B)
-            cropped_image_B = color_image_B[y1:y2, x1:x2]
+                # Calculate the bottom-right corner of the crop box
+                x2 = min(center_x + crop_width // 2, width_B)
+                y2 = min(center_y + crop_height // 2, height_B)
+                cropped_image_B = color_image_B[y1:y2, x1:x2]
             
             crop_again_height,crop_again_width  = 224, 224
             # Convert BGR to RGB for Matplotlib visualization
-            cropped_image_B = np.transpose(cropped_image_B, (2,0,1))
+            cropped_image_B = np.transpose(color_image_B, (2,0,1))
             C,H,W = cropped_image_B.shape
 
             # Calculate the center + 20 only when using 98 and 124 is -20 for start_x only
             # Calculate start positions correctly
             start_y = max((H - crop_again_height + 100) // 2, 0)
-            start_x = max((W - crop_again_width + 360) // 2, 0)
+            start_x = max((W - crop_again_width + 250) // 2, 0)
             # start_y = (H - crop_height) // 2
             # start_x = (W - crop_width - 20) // 2  
             # Perform cropping
@@ -592,22 +590,20 @@ class EvaluateRealRobot:
             if self.encoder == "Transformer":
                 print("crop to 224 by 224")
                 crop_width, crop_height = 224, 224
-            else:
-                # Define the crop size
-                crop_width, crop_height = 640, 480
-            # Calculate the top-left corner of the crop box
-            x1_A = max(center_x - crop_width // 2, 0)
-            y1_A = max(center_y - crop_height // 2, 0)
 
-            # Calculate the bottom-right corner of the crop box
-            x2_A = min(center_x + crop_width // 2, width_A)
-            y2_A = min(center_y + crop_height // 2, height_A)
-            cropped_image_A = color_image_A[y1_A:y2_A, x1_A:x2_A]
-            
-            crop_again_height_A,crop_again_width_A  = 224, 224
+                # Calculate the top-left corner of the crop box
+                x1_A = max(center_x_A - crop_width // 2, 0)
+                y1_A = max(center_y_A - crop_height // 2, 0)
+
+                # Calculate the bottom-right corner of the crop box
+                x2_A = min(center_x + crop_width // 2, width_A)
+                y2_A = min(center_y + crop_height // 2, height_A)
+                cropped_image_A = color_image_A[y1_A:y2_A, x1_A:x2_A]
+
+            crop_again_height_A,crop_again_width_A  = 640, 330
             # Convert BGR to RGB for Matplotlib visualization
-            cropped_image_A = np.transpose(cropped_image_A, (2,0,1))
-            C,H_A,W_A = cropped_image_A.shape
+            color_image_A = np.transpose(color_image_A, (2,0,1))
+            C,H_A,W_A = color_image_A.shape
 
             # Calculate the center + 20 only when using 98 and 124 is -20 for start_x only
             # Calculate start positions correctly
@@ -616,11 +612,11 @@ class EvaluateRealRobot:
             # start_y = (H - crop_height) // 2
             # start_x = (W - crop_width - 20) // 2  
             # Perform cropping
-            cropped_image_A = cropped_image_A[:, start_y_A:start_y_A + crop_again_height_A, start_x_A:start_x_A + crop_again_width_A]
+            cropped_image_A = color_image_A[:, start_y_A:start_y_A + crop_again_height_A, start_x_A:start_x_A + crop_again_width_A]
             cropped_image_A = np.transpose(cropped_image_A, (1,2,0))
 
             image_A_rgb = cv2.cvtColor(cropped_image_A, cv2.COLOR_BGR2RGB)
-            image_A_rgb = cv2.resize(image_A_rgb, (98, 98))
+            image_A_rgb = cv2.resize(image_A_rgb, (140, 140))
 
             ############### MULTIPLE VIEW ######
             height_B, width_B, _ = color_image_B.shape
@@ -630,35 +626,33 @@ class EvaluateRealRobot:
             if self.encoder == "Transformer":
                 print("crop to 224 by 224")
                 crop_width, crop_height = 224, 224
-            else:
-                # Define the crop size
-                crop_width, crop_height = 640, 480
-            # Calculate the top-left corner of the crop box
-            x1 = max(center_x - crop_width // 2, 0)
-            y1 = max(center_y - crop_height // 2, 0)
 
-            # Calculate the bottom-right corner of the crop box
-            x2 = min(center_x + crop_width // 2, width_B)
-            y2 = min(center_y + crop_height // 2, height_B)
-            cropped_image_B = color_image_B[y1:y2, x1:x2]
-            
+                # Calculate the top-left corner of the crop box
+                x1 = max(center_x - crop_width // 2, 0)
+                y1 = max(center_y - crop_height // 2, 0)
+
+                # Calculate the bottom-right corner of the crop box
+                x2 = min(center_x + crop_width // 2, width_B)
+                y2 = min(center_y + crop_height // 2, height_B)
+                cropped_image_B = color_image_B[y1:y2, x1:x2]
+                
             crop_again_height,crop_again_width  = 224, 224
             # Convert BGR to RGB for Matplotlib visualization
-            cropped_image_B = np.transpose(cropped_image_B, (2,0,1))
-            C,H,W = cropped_image_B.shape
+            color_image_B = np.transpose(color_image_B, (2,0,1))
+            C,H,W = color_image_B.shape
 
             # Calculate the center + 20 only when using 98 and 124 is -20 for start_x only
             # Calculate start positions correctly
             start_y = max((H - crop_again_height + 100) // 2, 0)
-            start_x = max((W - crop_again_width + 360) // 2, 0)
+            start_x = max((W - crop_again_width + 150) // 2, 0)
             # start_y = (H - crop_height) // 2
             # start_x = (W - crop_width - 20) // 2  
             # Perform cropping
-            cropped_image_B = cropped_image_B[:, start_y:start_y + crop_again_height, start_x:start_x + crop_again_width]
+            cropped_image_B = color_image_B[:, start_y:start_y + crop_again_height, start_x:start_x + crop_again_width]
             cropped_image_B = np.transpose(cropped_image_B, (1,2,0))
 
             image_B_rgb = cv2.cvtColor(cropped_image_B, cv2.COLOR_BGR2RGB)
-            image_B_rgb = cv2.resize(image_B_rgb, (98, 98))
+            image_B_rgb = cv2.resize(image_B_rgb, (140, 140))
 
 
 
@@ -676,7 +670,7 @@ class EvaluateRealRobot:
 
         # import matplotlib.pyplot as plt
         plt.imshow(image_A_rgb)
-        # plt.show()
+        plt.show()
         plt.imshow(image_B_rgb)
         plt.show()
         # Reshape to (C, H, W)
@@ -778,7 +772,7 @@ class EvaluateRealRobot:
                 print(gripper_action)
                 delta_gripper = abs(current_gripper_pos - gripper_action[position_idx])
                 # print(f'delta gripper : {delta_gripper}')
-                scaled_command = float(gripper_action[position_idx]*1.0)
+                scaled_command = float(gripper_action[position_idx]*1.2)
                 if scaled_command > 0.8:
                     scaled_command = 0.8
                 self.robotiq_gripper.send_gripper_command(scaled_command)
@@ -787,7 +781,7 @@ class EvaluateRealRobot:
                 # elif position_idx == len(end_effector_pos)-2:
                 #     time.sleep(0.01)
                 else:
-                    time.sleep(0.14)
+                    time.sleep(0.19)
                 # obs_end_time = time.time()
                 # duration_obs = obs_end_time-obs_time
                 # print(f"obs duration : {duration_obs}")
@@ -822,7 +816,7 @@ class EvaluateRealRobot:
 
         load_pretrained = True
         if load_pretrained:
-            ckpt_path = "/home/lm-2023/jeon_team_ws/lbr-stack/src/DP_cable_disconnection/checkpoints/resnet_force_mod_no_encode_hybrid_segment_nist_delta_99_remake.z_1000_20_DDIM_resnet34pre (1).pth"
+            ckpt_path = "/home/lm-2023/jeon_team_ws/lbr-stack/src/DP_cable_disconnection/checkpoints/resnet_force_mod_no_encode_hybrid_segment__1500_20_DDIM_resnet34pre.pth"
             #   if not os.path.isfile(ckpt_path):qq
             #       id = "1XKpfNSlwYMGqaF5CncoFaLKCDTWoLAHf1&confirm=tn"q
             #       gdown.download(id=id, output=ckpt_path, quiet=False)    
@@ -862,7 +856,7 @@ class EvaluateRealRobot:
         
         segment_mapping = {0: "Approach", 1: "Grasp", 2: "Unlock", 3: "Pull", 4: "Ungrasp"}
         object_mapping = {0: "USB", 1: "Dsub", 2: "Ethernet", 3: "Bnc", 4: "Terminal Block"}
-        with open('stats_nist_delta_99_remake.z_resnet_delta_with_force (3).json', 'r') as f:
+        with open('/home/lm-2023/jeon_team_ws/lbr-stack/src/DP_cable_disconnection/stats__resnet_delta_with_force.json', 'r') as f:
             stats = json.load(f)
             if force_mod:
                 stats['agent_pos']['min'] = np.array(stats['agent_pos']['min'], dtype=np.float32)
@@ -921,7 +915,7 @@ class EvaluateRealRobot:
                 gripper_pose = data_utils.normalize_gripper_data(agent_poses[:,-1].reshape(-1,1), stats=stats['agent_pos_gripper'])
                 processed_agent_poses = np.hstack((nagent_poses, agent_poses[:,3:9], gripper_pose))
                 nagent_poses = torch.from_numpy(processed_agent_poses).to(device, dtype=torch.float32)
-                object_indices = np.array([0,0])
+                object_indices = np.array([4,4])
                 segment_in = int(input("segment : "))
                 # segment_in = 0
                 # if segment_in == 1:
@@ -952,6 +946,10 @@ class EvaluateRealRobot:
                     # concat with low-dim observations
                     if force_mod and single_view and not cross_attn:
                         obs_features = torch.cat([image_features, force_feature, nagent_poses], dim=-1)
+                        if self.segment:
+                            obs_features = torch.cat([obs_features, language_features], dim=-1)
+                    if force_mod and not single_view and not cross_attn:
+                        obs_features = torch.cat([image_features, image_features_second_view, force_feature, nagent_poses], dim=-1)
                         if self.segment:
                             obs_features = torch.cat([obs_features, language_features], dim=-1)
                     elif force_mod and not single_view and not cross_attn:
@@ -1027,7 +1025,7 @@ class EvaluateRealRobot:
                 # only take action_horizon number of actions
                 start = diffusion.obs_horizon - 1
                 
-                end = start + diffusion.action_horizon
+                end = start + diffusion.action_horizon -3
                 action = action_pred[start:end,:] 
                 robot_action = [sublist[:-1] for sublist in action]
                 robot_action = delta_to_cumulative(robot_action)
@@ -1108,7 +1106,7 @@ class EvaluateRealRobot:
         # # Export to Excel file
         # excel_filename = "position_quaternion_data.xlsx"
         # df.to_excel(excel_filename, index=False)
-@hydra.main(version_base=None, config_path="config", config_name="resnet_force_mod_no_encode_modality")
+@hydra.main(version_base=None, config_path="config", config_name="resnet_force_mod_no_encode_modality dualview")
 def main(cfg: DictConfig):
     # Max steps will dicate how long the inference duration is going to be so it is very important
     # Initialize RealSense pipelines for both cameras
