@@ -531,7 +531,7 @@ def get_filename(input_string):
         return ""
 
 
-dataset_path = "nist_new.zarr.zip"
+dataset_path = "/home/lm-2023/jeon_team_ws/lbr-stack/src/DP_cable_disconnection/NIST_wrist2cam_FINAL.zarr.zip"
 # dataset_path = "/home/lm-2023/jeon_team_ws/lbr-stack/src/DP_cable_disconnection/nist_rotating_with_segment.zarr.zip"
 #@markdown ### **Network Demo**
 class DiffusionPolicy_Real:     
@@ -558,7 +558,7 @@ class DiffusionPolicy_Real:
         #|o|o|                             observations: 2
         #| |a|a|a|a|a|a|a|a|               actions executed: 8
         #|p|p|p|p|p|p|p|p|p|p|p|p|p|p|p|p| actions predicted: 16
-        batch_size = 24
+        batch_size = 2
         Transformer_bool = None
         modality = "without_force"
         view = "dual_view"
@@ -602,7 +602,7 @@ class DiffusionPolicy_Real:
             if encoder == "resnet":
                 if segment:
                     print("resnet WITH film")
-                    vision_encoder = train_utils().get_resnet_FILM('resnet34')
+                    vision_encoder = train_utils().get_resnet('resnet34')
                     vision_encoder = train_utils().replace_bn_with_gn(vision_encoder)
 
                 else:
@@ -855,7 +855,7 @@ class DiffusionPolicy_Real:
 
             
         # diffusion iteration
-        num_diffusion_iters = 25
+        num_diffusion_iters = 50
         if self.scheduler == "DDIM":
             print("DDIM scheduler")
             noise_scheduler = DDIMScheduler(

@@ -77,7 +77,7 @@ def train_Real_Robot(cfg: DictConfig):
     # Note that EMA parametesr are not optimized
     optimizer = torch.optim.AdamW(
         params=diffusion.nets.parameters(),
-        lr=4e-4, weight_decay=1e-6)
+        lr=3.75e-5, weight_decay=1e-6)
 
     # Cosine LR schedule with linear warmup
     lr_scheduler = get_scheduler(
@@ -164,7 +164,7 @@ def train_Real_Robot(cfg: DictConfig):
                         if segment:
                             # encoder vision features
                             image_features = diffusion.nets['vision_encoder'](
-                                image_input, language_features)
+                                image_input)
                         else:
                             # encoder vision features
                             image_features = diffusion.nets['vision_encoder'](
@@ -197,9 +197,7 @@ def train_Real_Robot(cfg: DictConfig):
                         # if segment:
                         #     obs_features = torch.cat([obs_features, language_features], dim=-1)
                     elif force_mod and not single_view and not cross_attn:
-                        obs_features = torch.cat([image_features, image_features_second_view, force_feature, nagent_pos], dim=-1)
-                        if segment:
-                            obs_features = torch.cat([obs_features, language_features], dim=-1)
+                        obs_features = torch.cat([image_features, image_features_second_view, language_features, force_feature, nagent_pos], dim=-1)
                     elif not force_mod and single_view:
                         obs_features = torch.cat([image_features, nagent_pos], dim=-1)
                     elif not force_mod and not single_view:
@@ -265,7 +263,7 @@ def train_Real_Robot(cfg: DictConfig):
             tglobal.set_postfix(loss=avg_loss)
             
             # Save checkpoint every 10 epochs or at the end of training
-            if epoch_idx >= 900 or (epoch_idx+1) == 1:
+            if epoch_idx >= 400 or (epoch_idx+1) == 1:
                 if (epoch_idx + 1) % 20 == 0 or (epoch_idx + 1) == end_epoch or (epoch_idx +1) == 1:
                     # Save only the state_dict of the model, including relevant submodules
                     torch.save(diffusion.nets.state_dict(),  os.path.join(checkpoint_dir, f'{cfg.name}_{data_name}_{epoch_idx+1}_20_DDIM_resnet34pre.pth'))
