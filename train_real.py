@@ -121,6 +121,14 @@ def train_Real_Robot(cfg: DictConfig):
                     naction = nbatch['action'].to(device)
                     if segment:
                         nlanguage_command = nbatch['language_command'][:,:diffusion.obs_horizon]
+                    if nlanguage_command[0][0][0][0] == "A":
+                        weights = [0.8, 0.2]
+                    elif nlanguage_command[0][0][0][0] == "G":
+                        weights = [0.8, 0.2]
+                    elif nlanguage_command[0][0][0][0] == "U":
+                        weights = [0.3, 0.7]
+                    elif nlanguage_command[0][0][0][0] == "P":
+                        weights = [0.4, 0.6]                
                     # print(f'nlangauge: {nlanguage_command[0]}')
                     # # Debug sequential data structure. It shoud be consecutive
                     # print(f"naction: {naction.cpu().numpy()}")
@@ -196,8 +204,9 @@ def train_Real_Robot(cfg: DictConfig):
                         obs_features = torch.cat([image_features, force_feature, nagent_pos], dim=-1)
                         # if segment:
                         #     obs_features = torch.cat([obs_features, language_features], dim=-1)
+                                
                     elif force_mod and not single_view and not cross_attn:
-                        obs_features = torch.cat([image_features, image_features_second_view, language_features, force_feature, nagent_pos], dim=-1)
+                        obs_features = torch.cat([image_features, image_features_second_view, language_features, nagent_pos], dim=-1)
                     elif not force_mod and single_view:
                         obs_features = torch.cat([image_features, nagent_pos], dim=-1)
                     elif not force_mod and not single_view:
@@ -217,7 +226,8 @@ def train_Real_Robot(cfg: DictConfig):
                     else:
                         print("Check your configuration for training")
 
-                    obs_cond = obs_features.flatten(start_dim=1)
+                    obs_cond_image = obs_features.flatten(start_dim=1)
+                    obs_cond_force = force_feature.flatten(start_dim=1)
                     # (B, obs_horizon * obs_dim)
 
                     # sample noise to add to actions
@@ -233,10 +243,10 @@ def train_Real_Robot(cfg: DictConfig):
                     # (this is the forward diffusion process)
                     noisy_actions = diffusion.noise_scheduler.add_noise(
                         naction, noise, timesteps)
-
+                    
                     # predict the noise residual
                     noise_pred = diffusion.noise_pred_net(
-                        noisy_actions, timesteps, global_cond=obs_cond)
+                        noisy_actions, timesteps, image_cond=obs_cond_image, force_cond = obs_cond_force, weights = weights)
 
                     # L2 loss
                     loss = nn.functional.mse_loss(noise_pred, noise)

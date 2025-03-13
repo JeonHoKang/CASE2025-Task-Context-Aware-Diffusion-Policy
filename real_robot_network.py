@@ -323,7 +323,8 @@ class ConditionalResidualBlock1D(nn.Module):
     def __init__(self,
             in_channels,
             out_channels,
-            cond_dim,
+            cond_dim_image,
+            cond_dim_force,
             kernel_size=3,
             n_groups=8):
         super().__init__()
@@ -337,9 +338,15 @@ class ConditionalResidualBlock1D(nn.Module):
         # predicts per-channel scale and bias
         cond_channels = out_channels * 2
         self.out_channels = out_channels
-        self.cond_encoder = nn.Sequential(
+        self.image_cond_encoder = nn.Sequential(
             nn.Mish(),
-            nn.Linear(cond_dim, cond_channels),
+            nn.Linear(cond_dim_image, cond_channels),
+            nn.Unflatten(-1, (-1, 1))
+        )
+
+        self.force_cond_encoder = nn.Sequential(
+            nn.Mish(),
+            nn.Linear(cond_dim_force, cond_channels),
             nn.Unflatten(-1, (-1, 1))
         )
 
@@ -347,7 +354,7 @@ class ConditionalResidualBlock1D(nn.Module):
         self.residual_conv = nn.Conv1d(in_channels, out_channels, 1) \
             if in_channels != out_channels else nn.Identity()
 
-    def forward(self, x, cond):
+    def forward(self, x, image_cond, force_cond, weights):
         '''
             x : [ batch_size x in_channels x horizon ]
             cond : [ batch_size x cond_dim]
@@ -356,8 +363,10 @@ class ConditionalResidualBlock1D(nn.Module):
             out : [ batch_size x out_channels x horizon ]
         '''
         out = self.blocks[0](x)
-        embed = self.cond_encoder(cond)
+        embed_image = self.image_cond_encoder(image_cond)
+        embed_force = self.force_cond_encoder(force_cond)
 
+        embed = weights[0] * embed_image + weights[1] * embed_force
         embed = embed.reshape(
             embed.shape[0], 2, self.out_channels, 1)
         scale = embed[:,0,...]
@@ -372,7 +381,8 @@ class ConditionalResidualBlock1D(nn.Module):
 class ConditionalUnet1D(nn.Module):
     def __init__(self,
         input_dim,
-        global_cond_dim,
+        image_cond_dim,
+        force_cond_dim,
         diffusion_step_embed_dim=256,
         down_dims=[256,512,1024],
         kernel_size=5,
@@ -400,17 +410,17 @@ class ConditionalUnet1D(nn.Module):
             nn.Mish(),
             nn.Linear(dsed * 4, dsed),
         )
-        cond_dim = dsed + global_cond_dim
-
+        cond_dim_image = dsed + image_cond_dim
+        cond_dim_force = force_cond_dim
         in_out = list(zip(all_dims[:-1], all_dims[1:]))
         mid_dim = all_dims[-1]
         self.mid_modules = nn.ModuleList([
             ConditionalResidualBlock1D(
-                mid_dim, mid_dim, cond_dim=cond_dim,
+                mid_dim, mid_dim, cond_dim_image=cond_dim_image, cond_dim_force = cond_dim_force,
                 kernel_size=kernel_size, n_groups=n_groups
             ),
             ConditionalResidualBlock1D(
-                mid_dim, mid_dim, cond_dim=cond_dim,
+                mid_dim, mid_dim, cond_dim_image=cond_dim_image, cond_dim_force = cond_dim_force,
                 kernel_size=kernel_size, n_groups=n_groups
             ),
         ])
@@ -420,11 +430,13 @@ class ConditionalUnet1D(nn.Module):
             is_last = ind >= (len(in_out) - 1)
             down_modules.append(nn.ModuleList([
                 ConditionalResidualBlock1D(
-                    dim_in, dim_out, cond_dim=cond_dim,
-                    kernel_size=kernel_size, n_groups=n_groups),
+                    dim_in, dim_out, cond_dim_image=cond_dim_image, cond_dim_force = cond_dim_force,
+                    kernel_size=kernel_size, n_groups=n_groups
+                ),
                 ConditionalResidualBlock1D(
-                    dim_out, dim_out, cond_dim=cond_dim,
-                    kernel_size=kernel_size, n_groups=n_groups),
+                    dim_out, dim_out, cond_dim_image=cond_dim_image, cond_dim_force = cond_dim_force,
+                    kernel_size=kernel_size, n_groups=n_groups
+                ),
                 Downsample1d(dim_out) if not is_last else nn.Identity()
             ]))
 
@@ -433,13 +445,16 @@ class ConditionalUnet1D(nn.Module):
             is_last = ind >= (len(in_out) - 1)
             up_modules.append(nn.ModuleList([
                 ConditionalResidualBlock1D(
-                    dim_out*2, dim_in, cond_dim=cond_dim,
-                    kernel_size=kernel_size, n_groups=n_groups),
+                    dim_out*2, dim_in, cond_dim_image=cond_dim_image, cond_dim_force = cond_dim_force,
+                    kernel_size=kernel_size, n_groups=n_groups
+                ),
                 ConditionalResidualBlock1D(
-                    dim_in, dim_in, cond_dim=cond_dim,
-                    kernel_size=kernel_size, n_groups=n_groups),
+                    dim_in, dim_in, cond_dim_image=cond_dim_image, cond_dim_force = cond_dim_force,
+                    kernel_size=kernel_size, n_groups=n_groups
+                ),
                 Upsample1d(dim_in) if not is_last else nn.Identity()
             ]))
+
 
         final_conv = nn.Sequential(
             Conv1dBlock(start_dim, start_dim, kernel_size=kernel_size),
@@ -458,7 +473,7 @@ class ConditionalUnet1D(nn.Module):
     def forward(self,
             sample: torch.Tensor,
             timestep: Union[torch.Tensor, float, int],
-            global_cond=None):
+            image_cond=None, force_cond=None, weights = [0.5, 0.5]):
         """
         x: (B,T,input_dim)
         timestep: (B,) or int, diffusion step
@@ -481,26 +496,29 @@ class ConditionalUnet1D(nn.Module):
 
         global_feature = self.diffusion_step_encoder(timesteps)
 
-        if global_cond is not None:
-            global_feature = torch.cat([
-                global_feature, global_cond
+        if image_cond is not None:
+            image_feature = torch.cat([
+                global_feature, image_cond
             ], axis=-1)
+
+        if force_cond is not None:
+            force_feature = force_cond
 
         x = sample
         h = []
         for idx, (resnet, resnet2, downsample) in enumerate(self.down_modules):
-            x = resnet(x, global_feature)
-            x = resnet2(x, global_feature)
+            x = resnet(x, image_feature, force_feature, weights)
+            x = resnet2(x, image_feature, force_feature, weights)
             h.append(x)
             x = downsample(x)
 
         for mid_module in self.mid_modules:
-            x = mid_module(x, global_feature)
+            x = mid_module(x, image_feature, force_feature, weights)
 
         for idx, (resnet, resnet2, upsample) in enumerate(self.up_modules):
             x = torch.cat((x, h.pop()), dim=1)
-            x = resnet(x, global_feature)
-            x = resnet2(x, global_feature)
+            x = resnet(x, image_feature, force_feature, weights)
+            x = resnet2(x, image_feature, force_feature, weights)
             x = upsample(x)
 
         x = self.final_conv(x)
@@ -636,7 +654,7 @@ class DiffusionPolicy_Real:
         # agent_pos is seven (x,y,z, w, y, z, w ) dimensional
         # observation feature has 514 dims in total per step
         if force_mod and not cross_attn:
-            obs_dim = vision_feature_dim + force_feature_dim  + lowdim_obs_dim
+            obs_dim = vision_feature_dim  + lowdim_obs_dim
             print(f"Observation conditioning dim: {obs_dim}")
         elif force_mod and cross_attn:
             obs_dim = vision_feature_dim  + lowdim_obs_dim
@@ -784,7 +802,7 @@ class DiffusionPolicy_Real:
         # create network object
         noise_pred_net = ConditionalUnet1D(
             input_dim=action_dim,
-            global_cond_dim=obs_dim*obs_horizon
+            image_cond_dim=obs_dim*obs_horizon, force_cond_dim=force_feature_dim*obs_horizon
         )
         if single_view and not force_mod and not force_encode and not cross_attn:
             # the final arch has 2 parts
