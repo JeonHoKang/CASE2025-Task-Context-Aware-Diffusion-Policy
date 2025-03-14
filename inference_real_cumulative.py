@@ -319,16 +319,16 @@ class EndEffectorPoseNode(Node):
                 joint_constraint = JointConstraint()
                 joint_constraint.joint_name = joint_name
                 joint_constraint.position = current_position
-                joint_constraint.tolerance_below = np.pi/2
-                joint_constraint.tolerance_above = np.pi/2
-                joint_constraint.weight = 0.5
+                joint_constraint.tolerance_below = np.pi/8
+                joint_constraint.tolerance_above = np.pi/8
+                joint_constraint.weight = 1.0
                 constraints.joint_constraints.append(joint_constraint)
             elif joint_name == "A3":
                 joint_constraint = JointConstraint()
                 joint_constraint.joint_name = joint_name
                 joint_constraint.position = current_position
-                joint_constraint.tolerance_below = np.pi/7
-                joint_constraint.tolerance_above = np.pi/7
+                joint_constraint.tolerance_below = np.pi/3
+                joint_constraint.tolerance_above = np.pi/3
                 joint_constraint.weight = 1.0
                 constraints.joint_constraints.append(joint_constraint)
             elif joint_name == "A4":
@@ -674,7 +674,6 @@ class EvaluateRealRobot:
         # plt.imshow(image_B_rgb)
         # plt.show()
         # Reshape to (C, H, W)
-        image_A = np.transpose(image_A_rgb, (2, 0, 1))
         image_B = np.transpose(image_B_rgb, (2, 0, 1))
 
         if not single_view:
@@ -730,7 +729,7 @@ class EvaluateRealRobot:
                 target_pose = Pose()
                 target_pose.position.x = current_pos[0] + position[0]
                 target_pose.position.y = current_pos[1] +  position[1]
-                target_pose.position.z = current_pos[2] +  position[2] + 0.004
+                target_pose.position.z = current_pos[2] +  position[2] + 0.001
                 target_pose.orientation.x = next_rot[0]
                 target_pose.orientation.y = next_rot[1]
                 target_pose.orientation.z = next_rot[2]
@@ -774,7 +773,7 @@ class EvaluateRealRobot:
                 print(gripper_action)
                 delta_gripper = abs(current_gripper_pos - gripper_action[position_idx])
                 # print(f'delta gripper : {delta_gripper}')
-                scaled_command = float(gripper_action[position_idx]*1.2)
+                scaled_command = float(gripper_action[position_idx]*2.6)
                 if scaled_command > 0.8:
                     scaled_command = 0.8
                 self.robotiq_gripper.send_gripper_command(scaled_command)
@@ -783,7 +782,7 @@ class EvaluateRealRobot:
                 # elif position_idx == len(end_effector_pos)-2:
                 #     time.sleep(0.01)
                 else:
-                    time.sleep(0.18)
+                    time.sleep(0.2)
                 # obs_end_time = time.time()
                 # duration_obs = obs_end_time-obs_time
                 # print(f"obs duration : {duration_obs}")
@@ -818,7 +817,7 @@ class EvaluateRealRobot:
 
         load_pretrained = True
         if load_pretrained:
-            ckpt_path = "/home/lm-2023/jeon_team_ws/lbr-stack/src/DP_cable_disconnection/checkpoints/resnet_force_mod_no_encode_hybrid_segment__1500_20_DDIM_resnet34pre.pth"
+            ckpt_path = "/home/lm-2023/jeon_team_ws/lbr-stack/src/DP_cable_disconnection/checkpoints/resnet_force_mod_no_encode_hybrid_segment_NIST_wrist2cam_FINAL.z_500_DDIM_adaptive.pth"
             #   if not os.path.isfile(ckpt_path):qq
             #       id = "1XKpfNSlwYMGqaF5CncoFaLKCDTWoLAHf1&confirm=tn"q
             #       gdown.download(id=id, output=ckpt_path, quiet=False)    
@@ -917,7 +916,7 @@ class EvaluateRealRobot:
                 gripper_pose = data_utils.normalize_gripper_data(agent_poses[:,-1].reshape(-1,1), stats=stats['agent_pos_gripper'])
                 processed_agent_poses = np.hstack((nagent_poses, agent_poses[:,3:9], gripper_pose))
                 nagent_poses = torch.from_numpy(processed_agent_poses).to(device, dtype=torch.float32)
-                object_indices = np.array([1,1])
+                object_indices = np.array([3,3])
                 segment_in = int(input("segment : "))
                 # segment_in = 0
                 # if segment_in == 1:
@@ -929,8 +928,25 @@ class EvaluateRealRobot:
                 objects = [object_mapping[idx] for idx in object_indices]
                 # Convert integer arrays to string arrays
                 language_commands = [f"{seg} {obj}" for seg, obj in zip(segments, objects)]
+                if language_commands[0][0] == "A":
+                    weights_matrix = [0.8, 0.2]
+                    execution_discount = 2
+                    diffusion_selection = 30
+                elif language_commands[0][0] == "G":
+                    weights_matrix = [0.8, 0.2]
+                    execution_discount = 0
+                    diffusion_selection = 5
+                elif language_commands[0][0] == "U":
+                    weights_matrix = [0.3, 0.7]
+                    execution_discount = 2
+                    diffusion_selection = 50
+                elif language_commands[0][0] == "P":
+                    weights_matrix = [0.4, 0.6]
+                    execution_discount = 0  
+                    diffusion_selection = 10
+                print(weights_matrix)   
                 language_commands = np.array(language_commands, dtype=object).reshape(-1,1)
-                print(language_commands)
+ 
                 # infer action
                 with torch.no_grad():
                     # get image features
@@ -951,7 +967,7 @@ class EvaluateRealRobot:
                         if self.segment:
                             obs_features = torch.cat([obs_features, language_features], dim=-1)
                     if force_mod and not single_view and not cross_attn:
-                        obs_features = torch.cat([image_features, image_features_second_view, language_features, force_feature, nagent_poses], dim=-1)
+                        obs_features = torch.cat([image_features, image_features_second_view, language_features, nagent_poses], dim=-1)
                         # if self.segment:
                         #     obs_features = torch.cat([obs_features, language_features], dim=-1)
                     elif force_mod and not single_view and not cross_attn:
@@ -988,12 +1004,12 @@ class EvaluateRealRobot:
 
                     # reshape observation to (B,obs_horizon*obs_dim)
                     obs_cond = obs_features.unsqueeze(0).flatten(start_dim=1)
-
+                    obs_cond2 = force_feature.unsqueeze(0).flatten(start_dim=1)
                     # initialize action from Guassian noise
                     noisy_action = torch.randn(
                         (B, diffusion.pred_horizon, diffusion.action_dim), device=device)
                     naction = noisy_action
-                    diffusion_inference_iteration = 10
+                    diffusion_inference_iteration = diffusion_selection
                     # init scheduler
                     diffusion.noise_scheduler.set_timesteps(diffusion_inference_iteration)
                     # denoising_time_start = time.time()
@@ -1002,7 +1018,7 @@ class EvaluateRealRobot:
                         noise_pred = ema_nets['noise_pred_net'](
                             sample=naction,
                             timestep=k,
-                            global_cond=obs_cond
+                            image_cond = obs_cond, force_cond = obs_cond2, weights = weights_matrix
                         )
 
                         # inverse diffusion step (remove noise)
@@ -1018,7 +1034,7 @@ class EvaluateRealRobot:
                     # print(f"duration : {duration}")
                 # unnormalize action
                 naction = naction.detach().to('cpu').numpy()
-                # (B, pred_horizon, action_dim)q
+                # (B, pred_horizon, action_dim)
                 naction = naction[0]
                 action_pred = data_utils.unnormalize_data(naction[:,:3], stats=stats['action'])
                 gripper_pred = data_utils.unnormalize_gripper_data(naction[:,-1], stats=stats['action_gripper']).reshape(-1,1)
@@ -1027,7 +1043,7 @@ class EvaluateRealRobot:
                 # only take action_horizon number of actions
                 start = diffusion.obs_horizon - 1
                 
-                end = start + diffusion.action_horizon
+                end = start + diffusion.action_horizon - execution_discount
                 action = action_pred[start:end,:] 
                 robot_action = [sublist[:-1] for sublist in action]
                 robot_action = delta_to_cumulative(robot_action)

@@ -895,7 +895,7 @@ class EvaluateRealRobot:
                 gripper_pose = data_utils.normalize_gripper_data(agent_poses[:,-1].reshape(-1,1), stats=stats['agent_pos_gripper'])
                 processed_agent_poses = np.hstack((nagent_poses, agent_poses[:,3:9], gripper_pose))
                 nagent_poses = torch.from_numpy(processed_agent_poses).to(device, dtype=torch.float32)
-                object_indices = np.array([4,4])
+                object_indices = np.array([0,0])
                 segment_in = int(input("segment : "))
                 # segment_in = 0
                 # if segment_in == 1:

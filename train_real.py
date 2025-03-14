@@ -121,14 +121,14 @@ def train_Real_Robot(cfg: DictConfig):
                     naction = nbatch['action'].to(device)
                     if segment:
                         nlanguage_command = nbatch['language_command'][:,:diffusion.obs_horizon]
-                    if nlanguage_command[0][0][0][0] == "A":
-                        weights = [0.8, 0.2]
-                    elif nlanguage_command[0][0][0][0] == "G":
-                        weights = [0.8, 0.2]
-                    elif nlanguage_command[0][0][0][0] == "U":
-                        weights = [0.3, 0.7]
-                    elif nlanguage_command[0][0][0][0] == "P":
-                        weights = [0.4, 0.6]                
+                        if nlanguage_command[0][0][0][0] == "A":
+                            weights = [0.8, 0.2]
+                        elif nlanguage_command[0][0][0][0] == "G":
+                            weights = [0.8, 0.2]
+                        elif nlanguage_command[0][0][0][0] == "U":
+                            weights = [0.3, 0.7]
+                        elif nlanguage_command[0][0][0][0] == "P":
+                            weights = [0.4, 0.6]                
                     # print(f'nlangauge: {nlanguage_command[0]}')
                     # # Debug sequential data structure. It shoud be consecutive
                     # print(f"naction: {naction.cpu().numpy()}")
