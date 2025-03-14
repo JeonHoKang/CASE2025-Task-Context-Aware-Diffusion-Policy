@@ -1,0 +1,19 @@
+# resnet+delta_force_mod_single_veiw_force_encode.yaml
+defaults:
+  - _self_
+
+name:  resnet_force_mod_no_encode_hybrid_segment
+
+model_config:
+  continue_training: False
+  start_epoch: 0
+  end_epoch: 500
+  encoder: "resnet"
+  action_def: "delta"
+  force_mod: True
+  single_view: False
+  force_encode: False
+  force_encoder: "None"
+  cross_attn: False
+  hybrid: False
+  segment: False

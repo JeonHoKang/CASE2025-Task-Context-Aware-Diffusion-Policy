@@ -14,7 +14,7 @@ import hydra
 from omegaconf import DictConfig
 
 # Make sure Crop is all there
-@hydra.main(version_base=None, config_path="config", config_name="resnet_force_mod_no_encode_modality dualview")
+@hydra.main(version_base=None, config_path="config", config_name="resnet_force_mod_no_encode_dualview")
 def train_Real_Robot(cfg: DictConfig):
     continue_training=  cfg.model_config.continue_training
     start_epoch = cfg.model_config.start_epoch
@@ -197,7 +197,11 @@ def train_Real_Robot(cfg: DictConfig):
                         # if segment:
                         #     obs_features = torch.cat([obs_features, language_features], dim=-1)
                     elif force_mod and not single_view and not cross_attn:
-                        obs_features = torch.cat([image_features, image_features_second_view, language_features, force_feature, nagent_pos], dim=-1)
+                        if segment:
+                            obs_features = torch.cat([image_features, image_features_second_view, language_features, force_feature, nagent_pos], dim=-1)
+                        else:
+                            obs_features = torch.cat([image_features, image_features_second_view, force_feature, nagent_pos], dim=-1)
+                            
                     elif not force_mod and single_view:
                         obs_features = torch.cat([image_features, nagent_pos], dim=-1)
                     elif not force_mod and not single_view:

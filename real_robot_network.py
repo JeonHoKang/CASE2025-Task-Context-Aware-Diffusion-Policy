@@ -531,7 +531,7 @@ def get_filename(input_string):
         return ""
 
 
-dataset_path = "/home/lm-2023/jeon_team_ws/lbr-stack/src/DP_cable_disconnection/NIST_wrist2cam_FINAL.zarr.zip"
+dataset_path = "/home/lm-2023/jeon_team_ws/lbr-stack/src/DP_cable_disconnection/Nist_wrist2cam_usb.zarr.zip"
 # dataset_path = "/home/lm-2023/jeon_team_ws/lbr-stack/src/DP_cable_disconnection/nist_rotating_with_segment.zarr.zip"
 #@markdown ### **Network Demo**
 class DiffusionPolicy_Real:     
@@ -558,7 +558,7 @@ class DiffusionPolicy_Real:
         #|o|o|                             observations: 2
         #| |a|a|a|a|a|a|a|a|               actions executed: 8
         #|p|p|p|p|p|p|p|p|p|p|p|p|p|p|p|p| actions predicted: 16
-        batch_size = 2
+        batch_size = 64
         Transformer_bool = None
         modality = "without_force"
         view = "dual_view"
@@ -817,6 +817,8 @@ class DiffusionPolicy_Real:
             else:
                 nets = nn.ModuleDict({
                     'vision_encoder': vision_encoder,
+                    'vision_encoder2': vision_encoder2,
+
                     'noise_pred_net': noise_pred_net
                 })
         elif single_view and force_encode:
