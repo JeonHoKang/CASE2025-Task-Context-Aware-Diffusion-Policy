@@ -531,7 +531,7 @@ def get_filename(input_string):
         return ""
 
 
-dataset_path = "/home/lm-2023/jeon_team_ws/lbr-stack/src/DP_cable_disconnection/Nist_wrist2cam_usb.zarr.zip"
+dataset_path = "/home/lm-2023/jeon_team_ws/lbr-stack/src/DP_cable_disconnection/Nist_wrist2cam_terminal.zarr.zip"
 # dataset_path = "/home/lm-2023/jeon_team_ws/lbr-stack/src/DP_cable_disconnection/nist_rotating_with_segment.zarr.zip"
 #@markdown ### **Network Demo**
 class DiffusionPolicy_Real:     

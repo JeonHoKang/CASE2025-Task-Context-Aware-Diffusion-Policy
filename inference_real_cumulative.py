@@ -406,9 +406,7 @@ class EvaluateRealRobot:
                 config_A.enable_device(serial_A)
                 config_A.enable_stream(rs.stream.color, 640, 360, rs.format.bgr8, 30)
                 align_A = rs.align(rs.stream.color)
-                self.pipeline_A = pipeline_A
-                self.align_A = align_A
-                self.pipeline_A.start(config_A)
+
         else:
             if len(camera_devices) < 1:
                 raise RuntimeError("One camera required, but fewer were detected.")
@@ -445,7 +443,9 @@ class EvaluateRealRobot:
             self.camera_device = camera_devices
             self.align_B = align_B
             self.pipeline_B.start(config_B)
-
+            self.pipeline_A = pipeline_A
+            self.align_A = align_A
+            self.pipeline_A.start(config_A)
         self.segment = segment
 
         self.encoder = encoder
@@ -575,13 +575,13 @@ class EvaluateRealRobot:
             aligned_frames_A = align_A.process(frames_A)
             color_frame_A = aligned_frames_A.get_color_frame()
             color_image_A = np.asanyarray(color_frame_A.get_data())
-            color_image_A.astype(np.float32)
+            # color_image_A.astype(np.float32)
 
             frames_B = pipeline_B.wait_for_frames()
             aligned_frames_B = align_B.process(frames_B)
             color_frame_B = aligned_frames_B.get_color_frame()
             color_image_B = np.asanyarray(color_frame_B.get_data())
-            color_image_B.astype(np.float32)
+            # color_image_B.astype(np.float32)
 
             height_A, width_A, _ = color_image_A.shape
 
@@ -599,10 +599,10 @@ class EvaluateRealRobot:
                 x2_A = min(center_x + crop_width // 2, width_A)
                 y2_A = min(center_y + crop_height // 2, height_A)
                 cropped_image_A = color_image_A[y1_A:y2_A, x1_A:x2_A]
+            color_image_A = np.transpose(color_image_A, (2,0,1))
 
             crop_again_height_A,crop_again_width_A  = 640, 330
             # Convert BGR to RGB for Matplotlib visualization
-            color_image_A = np.transpose(color_image_A, (2,0,1))
             C,H_A,W_A = color_image_A.shape
 
             # Calculate the center + 20 only when using 98 and 124 is -20 for start_x only
@@ -614,7 +614,8 @@ class EvaluateRealRobot:
             # Perform cropping
             cropped_image_A = color_image_A[:, start_y_A:start_y_A + crop_again_height_A, start_x_A:start_x_A + crop_again_width_A]
             cropped_image_A = np.transpose(cropped_image_A, (1,2,0))
-
+            # plt.imshow(cropped_image_A)
+            # plt.show()
             # image_A_rgb = cv2.cvtColor(cropped_image_A, cv2.COLOR_BGR2RGB)
             image_A_rgb = cv2.resize(cropped_image_A, (140, 140))
 
@@ -644,7 +645,7 @@ class EvaluateRealRobot:
             # Calculate the center + 20 only when using 98 and 124 is -20 for start_x only
             # Calculate start positions correctly
             start_y = max((H - crop_again_height + 100) // 2, 0)
-            start_x = max((W - crop_again_width + 150) // 2, 0)
+            start_x = max((W - crop_again_width + 145) // 2, 0)
             # start_y = (H - crop_height) // 2
             # start_x = (W - crop_width - 20) // 2  
             # Perform cropping
@@ -673,8 +674,8 @@ class EvaluateRealRobot:
         # plt.show()
         # plt.imshow(image_B_rgb)
         # plt.show()
-        # Reshape to (C, H, W)
-        image_A = np.transpose(image_A_rgb, (2, 0, 1))
+        # # Reshape to (C, H, W)
+        # image_A = np.transpose(image_A_rgb, (2, 0, 1))
         image_B = np.transpose(image_B_rgb, (2, 0, 1))
 
         if not single_view:
@@ -723,14 +724,13 @@ class EvaluateRealRobot:
             if self.action_def == "delta":
                 current_pos = EE_Pose_Node.get_fk()
                 np.array(quaternion)
-                print(current_pos)
                 # print(f'action command {end_effector_pos} delta')
                 next_rot = compute_next_quaternion(current_pos[3:], quaternion)
                 # Create Pose message for IK
                 target_pose = Pose()
                 target_pose.position.x = current_pos[0] + position[0]
                 target_pose.position.y = current_pos[1] +  position[1]
-                target_pose.position.z = current_pos[2] +  position[2] + 0.004
+                target_pose.position.z = current_pos[2] +  position[2]
                 target_pose.orientation.x = next_rot[0]
                 target_pose.orientation.y = next_rot[1]
                 target_pose.orientation.z = next_rot[2]
@@ -763,7 +763,7 @@ class EvaluateRealRobot:
             # goal_msg = FollowJointTrajectory.Goal()
             # trajectory_msg = JointTrajectory()
             kuka_execution.send_goal(waypoint_list)
-            for position_idx in range(len(end_effector_pos)-1):
+            for position_idx in range(len(end_effector_pos)):
                 obs_time = time.time()
                 obs = self.get_observation()
                 obs_list.append(obs)
@@ -774,16 +774,16 @@ class EvaluateRealRobot:
                 print(gripper_action)
                 delta_gripper = abs(current_gripper_pos - gripper_action[position_idx])
                 # print(f'delta gripper : {delta_gripper}')
-                scaled_command = float(gripper_action[position_idx]*1.2)
+                scaled_command = float(gripper_action[position_idx]*2)
                 if scaled_command > 0.8:
                     scaled_command = 0.8
                 self.robotiq_gripper.send_gripper_command(scaled_command)
-                if position_idx == len(end_effector_pos)-1:
-                    time.sleep(0.0)
-                # elif position_idx == len(end_effector_pos)-2:
-                #     time.sleep(0.01)
-                else:
-                    time.sleep(0.18)
+                # if position_idx == len(end_effector_pos)-1:
+                #     time.sleep(0.0)
+                # # elif position_idx == len(end_effector_pos)-2:
+                # #     time.sleep(0.01)
+                # else:
+                time.sleep(0.18)
                 # obs_end_time = time.time()
                 # duration_obs = obs_end_time-obs_time
                 # print(f"obs duration : {duration_obs}")
@@ -818,7 +818,7 @@ class EvaluateRealRobot:
 
         load_pretrained = True
         if load_pretrained:
-            ckpt_path = "/home/lm-2023/jeon_team_ws/lbr-stack/src/DP_cable_disconnection/checkpoints/resnet_force_mod_no_encode_hybrid_segment__1500_20_DDIM_resnet34pre.pth"
+            ckpt_path = "checkpoints/resnet_force_mod_no_encode_hybrid_segment__1000_20_DDIM_resnet34pre (2).pth"
             #   if not os.path.isfile(ckpt_path):qq
             #       id = "1XKpfNSlwYMGqaF5CncoFaLKCDTWoLAHf1&confirm=tn"q
             #       gdown.download(id=id, output=ckpt_path, quiet=False)    
@@ -858,7 +858,7 @@ class EvaluateRealRobot:
         
         segment_mapping = {0: "Approach", 1: "Grasp", 2: "Unlock", 3: "Pull", 4: "Ungrasp"}
         object_mapping = {0: "USB", 1: "Dsub", 2: "Ethernet", 3: "Bnc", 4: "Terminal Block"}
-        with open('/home/lm-2023/jeon_team_ws/lbr-stack/src/DP_cable_disconnection/stats_FINAL_two_resnet_delta_with_force.json', 'r') as f:
+        with open('/home/lm-2023/jeon_team_ws/lbr-stack/src/DP_cable_disconnection/stats_Nist_wrist2cam_usb.z_resnet_delta_with_force.json', 'r') as f:
             stats = json.load(f)
             if force_mod:
                 stats['agent_pos']['min'] = np.array(stats['agent_pos']['min'], dtype=np.float32)
@@ -918,19 +918,20 @@ class EvaluateRealRobot:
                 processed_agent_poses = np.hstack((nagent_poses, agent_poses[:,3:9], gripper_pose))
                 nagent_poses = torch.from_numpy(processed_agent_poses).to(device, dtype=torch.float32)
                 object_indices = np.array([1,1])
-                segment_in = int(input("segment : "))
+                if self.segment:
+                    segment_in = int(input("segment : "))
                 # segment_in = 0
                 # if segment_in == 1:
                 #     self.robotiq_gripper.send_gripper_command(0.8)
                 if self.segment:
                     segment_arr = np.array([segment_in, segment_in])
 
-                segments = [segment_mapping[idx] for idx in segment_arr]
-                objects = [object_mapping[idx] for idx in object_indices]
-                # Convert integer arrays to string arrays
-                language_commands = [f"{seg} {obj}" for seg, obj in zip(segments, objects)]
-                language_commands = np.array(language_commands, dtype=object).reshape(-1,1)
-                print(language_commands)
+                    segments = [segment_mapping[idx] for idx in segment_arr]
+                    objects = [object_mapping[idx] for idx in object_indices]
+                    # Convert integer arrays to string arrays
+                    language_commands = [f"{seg} {obj}" for seg, obj in zip(segments, objects)]
+                    language_commands = np.array(language_commands, dtype=object).reshape(-1,1)
+                    print(language_commands)
                 # infer action
                 with torch.no_grad():
                     # get image features
@@ -951,7 +952,10 @@ class EvaluateRealRobot:
                         if self.segment:
                             obs_features = torch.cat([obs_features, language_features], dim=-1)
                     if force_mod and not single_view and not cross_attn:
-                        obs_features = torch.cat([image_features, image_features_second_view, language_features, force_feature, nagent_poses], dim=-1)
+                        if self.segment:
+                            obs_features = torch.cat([image_features, image_features_second_view, language_features, force_feature, nagent_poses], dim=-1)
+                        else:
+                            obs_features = torch.cat([image_features, image_features_second_view, force_feature, nagent_poses], dim=-1)
                         # if self.segment:
                         #     obs_features = torch.cat([obs_features, language_features], dim=-1)
                     elif force_mod and not single_view and not cross_attn:
@@ -993,7 +997,7 @@ class EvaluateRealRobot:
                     noisy_action = torch.randn(
                         (B, diffusion.pred_horizon, diffusion.action_dim), device=device)
                     naction = noisy_action
-                    diffusion_inference_iteration = 10
+                    diffusion_inference_iteration = 50
                     # init scheduler
                     diffusion.noise_scheduler.set_timesteps(diffusion_inference_iteration)
                     # denoising_time_start = time.time()
@@ -1028,7 +1032,7 @@ class EvaluateRealRobot:
                 start = diffusion.obs_horizon - 1
                 
                 end = start + diffusion.action_horizon
-                action = action_pred[start:end,:] 
+                action = action_pred[start:end,:]
                 robot_action = [sublist[:-1] for sublist in action]
                 robot_action = delta_to_cumulative(robot_action)
                 gripper_action = [sublist[-1] for sublist in action]
@@ -1108,7 +1112,7 @@ class EvaluateRealRobot:
         # # Export to Excel file
         # excel_filename = "position_quaternion_data.xlsx"
         # df.to_excel(excel_filename, index=False)
-@hydra.main(version_base=None, config_path="config", config_name="resnet_force_mod_no_encode_modality dualview")
+@hydra.main(version_base=None, config_path="config", config_name="resnet_force_mod_no_encode_dualview")
 def main(cfg: DictConfig):
     # Max steps will dicate how long the inference duration is going to be so it is very important
     # Initialize RealSense pipelines for both cameras
@@ -1144,4 +1148,4 @@ def main(cfg: DictConfig):
         # Ensure shutdown is called even if an error occurs
         rclpy.shutdown()
 if __name__ == "__main__":
-    main()
+    main() 

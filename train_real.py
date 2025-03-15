@@ -77,7 +77,7 @@ def train_Real_Robot(cfg: DictConfig):
     # Note that EMA parametesr are not optimized
     optimizer = torch.optim.AdamW(
         params=diffusion.nets.parameters(),
-        lr=3.75e-5, weight_decay=1e-6)
+        lr=1e-4, weight_decay=1e-6)
 
     # Cosine LR schedule with linear warmup
     lr_scheduler = get_scheduler(
@@ -267,10 +267,10 @@ def train_Real_Robot(cfg: DictConfig):
             tglobal.set_postfix(loss=avg_loss)
             
             # Save checkpoint every 10 epochs or at the end of training
-            if epoch_idx >= 400 or (epoch_idx+1) == 1:
+            if epoch_idx >= 700 or (epoch_idx+1) == 1:
                 if (epoch_idx + 1) % 20 == 0 or (epoch_idx + 1) == end_epoch or (epoch_idx +1) == 1:
                     # Save only the state_dict of the model, including relevant submodules
-                    torch.save(diffusion.nets.state_dict(),  os.path.join(checkpoint_dir, f'{cfg.name}_{data_name}_{epoch_idx+1}_20_DDIM_resnet34pre.pth'))
+                    torch.save(diffusion.nets.state_dict(),  os.path.join(checkpoint_dir, f'{cfg.name}_{data_name}_{epoch_idx+1}_20_DDIM_resnet34pre_2.pth'))
     # Plot the loss after training is complete
     plt.figure(figsize=(10, 6))
     plt.plot(range(1, end_epoch + 1), epoch_losses, marker='o', label='Training Loss')
