@@ -1,7 +1,7 @@
 # Task-Context-Aware Diffusion Policy with Language Guidance for Multi-task Disassembly
 
 
-Jeon Ho Kang, Sagar Joshi, Ruopeng Huang, and Satyandra K. Gupta
+Jeon Ho Kang, Sagar Joshi, Neel Dhanaraj, and Satyandra K. Gupta
 
 University of Southern California
 
