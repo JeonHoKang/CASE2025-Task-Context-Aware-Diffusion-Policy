@@ -5,7 +5,7 @@ Jeon Ho Kang, Sagar Joshi, Ruopeng Huang, and Satyandra K. Gupta
 
 University of Southern California
 
-![System Architecture](imgs/overview_system.png)
+![System Architecture](imgs/system_architecture.png)
 
 Baseline code for diffusion policy was derived from [Diffusion Policy](https://github.com/real-stanford/diffusion_policy)
 
