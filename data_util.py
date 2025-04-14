@@ -95,7 +95,7 @@ class data_utils:
     
     def normalize_gripper_data(data, stats):
         # nomalize to [0,1]
-        ndata = (data - stats['min']) / (stats['max'] - stats['min'])
+        ndata = (data - stats['min']) / (stats['max'] - stats['min']+1e-7)
         return ndata
 
     def unnormalize_gripper_data(ndata, stats):
@@ -287,13 +287,13 @@ class RealRobotDataSet(torch.utils.data.Dataset):
         
         # Start adding normalized training data
         normalized_train_data['image'] = train_image_data
-        segment_indices = dataset_root['data']['state'][:, 16].astype(int)
-        object_indices = dataset_root['data']['state'][:, 17].astype(int)
-        segments = [segment_mapping[idx] for idx in segment_indices]
-        objects = [object_mapping[idx] for idx in object_indices]
-        # Convert integer arrays to string arrays
-        language_commands = [f"{seg} {obj}" for seg, obj in zip(segments, objects)]
-        normalized_train_data['language_command'] = np.array(language_commands, dtype=object).reshape(-1,1)
+        # segment_indices = dataset_root['data']['state'][:, 16].astype(int)
+        # object_indices = dataset_root['data']['state'][:, 17].astype(int)
+        # segments = [segment_mapping[idx] for idx in segment_indices]
+        # objects = [object_mapping[idx] for idx in object_indices]
+        # # Convert integer arrays to string arrays
+        # language_commands = [f"{seg} {obj}" for seg, obj in zip(segments, objects)]
+        # normalized_train_data['language_command'] = np.array(language_commands, dtype=object).reshape(-1,1)
 
 
         # Generate language commands

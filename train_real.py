@@ -77,7 +77,11 @@ def train_Real_Robot(cfg: DictConfig):
     # Note that EMA parametesr are not optimized
     optimizer = torch.optim.AdamW(
         params=diffusion.nets.parameters(),
+<<<<<<< HEAD
         lr=2e-4, weight_decay=1e-6)
+=======
+        lr=1e-4, weight_decay=1e-6)
+>>>>>>> 808fcc80ad043773425869f82e086dd6a2b58967
 
     # Cosine LR schedule with linear warmup
     lr_scheduler = get_scheduler(
@@ -201,6 +205,10 @@ def train_Real_Robot(cfg: DictConfig):
                             obs_features = torch.cat([image_features, image_features_second_view, language_features, force_feature, nagent_pos], dim=-1)
                         else:
                             obs_features = torch.cat([image_features, image_features_second_view, force_feature, nagent_pos], dim=-1)
+<<<<<<< HEAD
+=======
+                            
+>>>>>>> 808fcc80ad043773425869f82e086dd6a2b58967
                     elif not force_mod and single_view:
                         obs_features = torch.cat([image_features, nagent_pos], dim=-1)
                     elif not force_mod and not single_view:
@@ -269,7 +277,7 @@ def train_Real_Robot(cfg: DictConfig):
             if epoch_idx >= 700 or (epoch_idx+1) == 1:
                 if (epoch_idx + 1) % 20 == 0 or (epoch_idx + 1) == end_epoch or (epoch_idx +1) == 1:
                     # Save only the state_dict of the model, including relevant submodules
-                    torch.save(diffusion.nets.state_dict(),  os.path.join(checkpoint_dir, f'{cfg.name}_{data_name}_{epoch_idx+1}_20_DDIM_resnet34pre.pth'))
+                    torch.save(diffusion.nets.state_dict(),  os.path.join(checkpoint_dir, f'{cfg.name}_{data_name}_{epoch_idx+1}_20_DDIM_resnet34pre_2.pth'))
     # Plot the loss after training is complete
     plt.figure(figsize=(10, 6))
     plt.plot(range(1, end_epoch + 1), epoch_losses, marker='o', label='Training Loss')
