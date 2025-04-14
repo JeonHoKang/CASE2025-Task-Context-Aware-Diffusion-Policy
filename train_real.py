@@ -77,11 +77,7 @@ def train_Real_Robot(cfg: DictConfig):
     # Note that EMA parametesr are not optimized
     optimizer = torch.optim.AdamW(
         params=diffusion.nets.parameters(),
-<<<<<<< HEAD
-        lr=2e-4, weight_decay=1e-6)
-=======
         lr=1e-4, weight_decay=1e-6)
->>>>>>> 808fcc80ad043773425869f82e086dd6a2b58967
 
     # Cosine LR schedule with linear warmup
     lr_scheduler = get_scheduler(
@@ -125,8 +121,16 @@ def train_Real_Robot(cfg: DictConfig):
                     naction = nbatch['action'].to(device)
                     if segment:
                         nlanguage_command = nbatch['language_command'][:,:diffusion.obs_horizon]
+                        if nlanguage_command[0][0][0][0] == "A":
+                            weights = [0.8, 0.2]
+                        elif nlanguage_command[0][0][0][0] == "G":
+                            weights = [0.8, 0.2]
+                        elif nlanguage_command[0][0][0][0] == "U":
+                            weights = [0.3, 0.7]
+                        elif nlanguage_command[0][0][0][0] == "P":
+                            weights = [0.4, 0.6]                
                     # print(f'nlangauge: {nlanguage_command[0]}')
-                    # # Debug sequential data structure. It shoud be consecutive
+                    # Debug sequential data structure. It shoud be consecutive
                     # print(f"naction: {naction.cpu().numpy()}")
                     # imdata1 = nimage[0].cpu()
                     # imdata1 = imdata1.numpy()
@@ -143,7 +147,7 @@ def train_Real_Robot(cfg: DictConfig):
                     #     axes[j].imshow(img)
                     #     axes[j].axis('off')  # Hide the axes
                     #     # Show the plot
-                    # # plt.show()  
+                    # plt.show()  
 
                     # # For double realsense config only
                     # for j in range(2):
@@ -200,15 +204,9 @@ def train_Real_Robot(cfg: DictConfig):
                         obs_features = torch.cat([image_features, force_feature, nagent_pos], dim=-1)
                         # if segment:
                         #     obs_features = torch.cat([obs_features, language_features], dim=-1)
+                                
                     elif force_mod and not single_view and not cross_attn:
-                        if segment:
-                            obs_features = torch.cat([image_features, image_features_second_view, language_features, force_feature, nagent_pos], dim=-1)
-                        else:
-                            obs_features = torch.cat([image_features, image_features_second_view, force_feature, nagent_pos], dim=-1)
-<<<<<<< HEAD
-=======
-                            
->>>>>>> 808fcc80ad043773425869f82e086dd6a2b58967
+                        obs_features = torch.cat([image_features, image_features_second_view, force_feature, language_features, nagent_pos], dim=-1)
                     elif not force_mod and single_view:
                         obs_features = torch.cat([image_features, nagent_pos], dim=-1)
                     elif not force_mod and not single_view:
@@ -227,7 +225,7 @@ def train_Real_Robot(cfg: DictConfig):
                             obs_features = torch.cat([joint_features, image_features_second_view, nagent_pos], dim=-1)
                     else:
                         print("Check your configuration for training")
-
+                    
                     obs_cond = obs_features.flatten(start_dim=1)
                     # (B, obs_horizon * obs_dim)
 
@@ -244,10 +242,10 @@ def train_Real_Robot(cfg: DictConfig):
                     # (this is the forward diffusion process)
                     noisy_actions = diffusion.noise_scheduler.add_noise(
                         naction, noise, timesteps)
-
+                    
                     # predict the noise residual
                     noise_pred = diffusion.noise_pred_net(
-                        noisy_actions, timesteps, global_cond=obs_cond)
+                        noisy_actions, timesteps, global_cond= obs_cond)
 
                     # L2 loss
                     loss = nn.functional.mse_loss(noise_pred, noise)
@@ -274,10 +272,10 @@ def train_Real_Robot(cfg: DictConfig):
             tglobal.set_postfix(loss=avg_loss)
             
             # Save checkpoint every 10 epochs or at the end of training
-            if epoch_idx >= 700 or (epoch_idx+1) == 1:
+            if epoch_idx >= 400 or (epoch_idx+1) == 1:
                 if (epoch_idx + 1) % 20 == 0 or (epoch_idx + 1) == end_epoch or (epoch_idx +1) == 1:
                     # Save only the state_dict of the model, including relevant submodules
-                    torch.save(diffusion.nets.state_dict(),  os.path.join(checkpoint_dir, f'{cfg.name}_{data_name}_{epoch_idx+1}_20_DDIM_resnet34pre_2.pth'))
+                    torch.save(diffusion.nets.state_dict(),  os.path.join(checkpoint_dir, f'{cfg.name}_{data_name}_{epoch_idx+1}_new_data_USB.pth'))
     # Plot the loss after training is complete
     plt.figure(figsize=(10, 6))
     plt.plot(range(1, end_epoch + 1), epoch_losses, marker='o', label='Training Loss')

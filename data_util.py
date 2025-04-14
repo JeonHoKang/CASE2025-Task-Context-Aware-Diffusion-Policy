@@ -287,13 +287,13 @@ class RealRobotDataSet(torch.utils.data.Dataset):
         
         # Start adding normalized training data
         normalized_train_data['image'] = train_image_data
-        # segment_indices = dataset_root['data']['state'][:, 16].astype(int)
-        # object_indices = dataset_root['data']['state'][:, 17].astype(int)
-        # segments = [segment_mapping[idx] for idx in segment_indices]
-        # objects = [object_mapping[idx] for idx in object_indices]
+        segment_indices = dataset_root['data']['state'][:, 16].astype(int)
+        object_indices = dataset_root['data']['state'][:, 17].astype(int)
+        segments = [segment_mapping[idx] for idx in segment_indices]
+        objects = [object_mapping[idx] for idx in object_indices]
         # # Convert integer arrays to string arrays
-        # language_commands = [f"{seg} {obj}" for seg, obj in zip(segments, objects)]
-        # normalized_train_data['language_command'] = np.array(language_commands, dtype=object).reshape(-1,1)
+        language_commands = [f"{seg} {obj}" for seg, obj in zip(segments, objects)]
+        normalized_train_data['language_command'] = np.array(language_commands, dtype=object).reshape(-1,1)
 
 
         # Generate language commands
