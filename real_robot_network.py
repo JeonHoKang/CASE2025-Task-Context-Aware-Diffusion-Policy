@@ -817,6 +817,7 @@ class DiffusionPolicy_Real:
             else:
                 nets = nn.ModuleDict({
                     'vision_encoder': vision_encoder,
+                    'vision_encoder2': vision_encoder2,
                     'noise_pred_net': noise_pred_net
                 })
         elif single_view and force_encode:
