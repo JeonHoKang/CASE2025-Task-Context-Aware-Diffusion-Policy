@@ -404,7 +404,7 @@ class EvaluateRealRobot:
                 # Configure Camera A
                 config_A = rs.config()
                 config_A.enable_device(serial_A)
-                config_A.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
+                config_A.enable_stream(rs.stream.color, 640, 480, rs.format.rgb8, 30)
                 align_A = rs.align(rs.stream.color)
                 self.pipeline_A = pipeline_A
                 self.align_A = align_A
@@ -419,7 +419,7 @@ class EvaluateRealRobot:
         # Configure Camera B
         config_B = rs.config()
         config_B.enable_device(serial_B)
-        config_B.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
+        config_B.enable_stream(rs.stream.color, 640, 480, rs.format.rgb8, 30)
 
         # Start pipelines
         align_B = rs.align(rs.stream.color)
@@ -542,15 +542,25 @@ class EvaluateRealRobot:
             color_frame_A = aligned_frames_A.get_color_frame()
             color_image_A = np.asanyarray(color_frame_A.get_data())
             color_image_A.astype(np.float32)
+            crop_again_height_A,crop_again_width_A  = 480, 480
+            # Convert BGR to RGB for Matplotlib visualization
+            C,H,W = color_image_A.shape
 
+            # Calculate the center + 20 only when using 98 and 124 is -20 for start_x only
+            # Calculate start positions correctly
+            start_y_A = max((H - crop_again_height_A) // 2, 0)
+            start_x_A = max((W - crop_again_width_A) // 2, 0)
+
+            # Perform cropping
+            cropped_image_A = color_image_A[:, start_y_A:start_y_A + crop_again_height_A, start_x_A:start_x_A + crop_again_width_A]
+            cropped_image_A = np.transpose(cropped_image_A, (1,2,0))
             frames_B = pipeline_B.wait_for_frames()
             aligned_frames_B = align_B.process(frames_B)
             color_frame_B = aligned_frames_B.get_color_frame()
             color_image_B = np.asanyarray(color_frame_B.get_data())
             color_image_B.astype(np.float32)
         
-            image_A = cv2.resize(color_image_A, (320, 240), interpolation=cv2.INTER_AREA)
-            image_A_rgb = cv2.cvtColor(image_A, cv2.COLOR_BGR2RGB)
+            image_A = cv2.resize(cropped_image_A, (224, 224), interpolation=cv2.INTER_AREA)
 
         # Get the image dimensions
         height_B, width_B, _ = color_image_B.shape
@@ -562,18 +572,16 @@ class EvaluateRealRobot:
             crop_width, crop_height = 224, 224
         else:
             # Define the crop size
-            crop_width, crop_height = 320, 240
+            crop_width, crop_height = 224, 224
         # Calculate the top-left corner of the crop box
-        x1 = max(center_x - crop_width // 2, 0)
-        y1 = max(center_y - crop_height // 2, 0)
+        C,H,W = color_image_B.shape
 
-        # Calculate the bottom-right corner of the crop box
-        x2 = min(center_x + crop_width // 2, width_B)
-        y2 = min(center_y + crop_height // 2, height_B)
-        cropped_image_B = color_image_B[y1:y2, x1:x2]
+        start_y = max((H - crop_height + 100) // 2, 0)
+        start_x = max((W - crop_width + 200) // 2, 0)
 
-        # Convert BGR to RGB for Matplotlib visualization
-        image_B_rgb = cv2.cvtColor(cropped_image_B, cv2.COLOR_BGR2RGB)
+        # Perform cropping
+        cropped_image_B = color_image_B[:, start_y:start_y + crop_height, start_x:start_x + crop_width]
+        image_B_rgb = np.transpose(cropped_image_B, (1,2,0))
          ### Visualizing purposes
         # import nodes
         print(f'current agent position, {agent_pos}')
@@ -586,10 +594,10 @@ class EvaluateRealRobot:
         rot_6d = mat_to_rot6d(rot_m_agent)
         agent_pos_10d = np.hstack((agent_position, rot_6d, gripper_pos))
         import matplotlib.pyplot as plt
-        # plt.imshow(image_A_rgb)
-        # # plt.show()
-        # plt.imshow(image_B_rgb)
+        plt.imshow(image_A_rgb)
         # plt.show()
+        plt.imshow(image_B_rgb)
+        plt.show()
         # Reshape to (C, H, W)
         image_B = np.transpose(image_B_rgb, (2, 0, 1))
         if not single_view:
@@ -709,7 +717,7 @@ class EvaluateRealRobot:
 
         load_pretrained = True
         if load_pretrained:
-            ckpt_path = "/home/lm-2023/jeon_team_ws/lbr-stack/src/DP_cable_disconnection/checkpoints/resnet_force_mod_no_encode_hybrid_segment__1000_20_DDIM_resnet34pre.pth"
+            ckpt_path = "/home/lm-2023/jeon_team_ws/lbr-stack/src/DP_cable_disconnection/checkpoints/resnet_force_mod_no_encode_hybrid_segment_CASE_new_nist_usb.z_800_new_data_USB.pth"
             #   if not os.path.isfile(ckpt_path):qq
             #       id = "1XKpfNSlwYMGqaF5CncoFaLKCDTWoLAHf1&confirm=tn"q
             #       gdown.download(id=id, output=ckpt_path, quiet=False)    
@@ -827,7 +835,11 @@ class EvaluateRealRobot:
                         if self.segment:
                             obs_features = torch.cat([obs_features, nsegment, nobject], dim=-1)
                     elif force_mod and not single_view and not cross_attn:
-                        obs_features = torch.cat([image_features_second_view, image_features, force_feature, nagent_poses], dim=-1)
+                        if self.segment:
+                            obs_features = torch.cat([image_features_second_view, image_features, force_feature, nagent_poses], dim=-1)
+                        else:
+                            obs_features = torch.cat([image_features_second_view, image_features, force_feature, nagent_poses], dim=-1)
+
                     elif not force_mod and single_view:
                         obs_features = torch.cat([image_features, nagent_poses], dim=-1)
                     elif not force_mod and not single_view:
@@ -980,7 +992,7 @@ class EvaluateRealRobot:
         # Export to Excel file
         excel_filename = "position_quaternion_data.xlsx"
         df.to_excel(excel_filename, index=False)
-@hydra.main(version_base=None, config_path="config", config_name="resnet_force_mod_no_encode_modality")
+@hydra.main(version_base=None, config_path="config", config_name="resnet_force_mod_no_encode_dualview")
 def main(cfg: DictConfig):
     # Max steps will dicate how long the inference duration is going to be so it is very important
     # Initialize RealSense pipelines for both cameras
