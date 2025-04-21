@@ -531,7 +531,7 @@ def get_filename(input_string):
         return ""
 
 
-dataset_path = "/home/jeonkang/jeon_ws/DP_cable_disconnection/CASE_new_nist_usb.zarr.zip"
+dataset_path = "/home/jeonkang/jeon_ws/DP_cable_disconnection/CASE_DSUB_Seperate_new100.zarr.zip"
 # dataset_path = "/home/lm-2023/jeon_team_ws/lbr-stack/src/DP_cable_disconnection/nist_rotating_with_segment.zarr.zip"
 #@markdown ### **Network Demo**
 class DiffusionPolicy_Real:     
@@ -549,9 +549,9 @@ class DiffusionPolicy_Real:
         # action dimension should also correspond with the state dimension (x,y,z, x, y, z, w)
         action_dim = 10
         # parameters
-        pred_horizon = 16
+        pred_horizon = 48
         obs_horizon = 2
-        action_horizon = 8
+        action_horizon = 24
         lowdim_obs_dim = 10
         if segment:
             lowdim_obs_dim += 512
@@ -572,7 +572,7 @@ class DiffusionPolicy_Real:
         # Define Second vision encoder
 
         if not single_view:
-            vision_encoder2 = train_utils().get_resnet('resnet34')
+            vision_encoder2 = train_utils().get_resnet('resnet18')
             vision_encoder2 = train_utils().replace_bn_with_gn(vision_encoder2)
         if force_encode:
             if encoder == "viT":
@@ -606,8 +606,8 @@ class DiffusionPolicy_Real:
                     vision_encoder = train_utils().replace_bn_with_gn(vision_encoder)
 
                 else:
-                    print("resnet")
-                    vision_encoder = train_utils().get_resnet('resnet34')
+                    print("resnet18")
+                    vision_encoder = train_utils().get_resnet('resnet18')
                     vision_encoder = train_utils().replace_bn_with_gn(vision_encoder)
 
             elif encoder == "Transformer":
@@ -817,6 +817,7 @@ class DiffusionPolicy_Real:
             else:
                 nets = nn.ModuleDict({
                     'vision_encoder': vision_encoder,
+                    'vision_encoder2': vision_encoder2,
                     'noise_pred_net': noise_pred_net
                 })
         elif single_view and force_encode:

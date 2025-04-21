@@ -7,7 +7,7 @@ name:  resnet_force_mod_no_encode_hybrid_segment
 model_config:
   continue_training: False
   start_epoch: 0
-  end_epoch: 1000
+  end_epoch: 2000
   encoder: "resnet"
   action_def: "delta"
   force_mod: True

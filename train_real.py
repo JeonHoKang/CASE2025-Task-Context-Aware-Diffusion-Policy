@@ -206,7 +206,10 @@ def train_Real_Robot(cfg: DictConfig):
                         #     obs_features = torch.cat([obs_features, language_features], dim=-1)
                                 
                     elif force_mod and not single_view and not cross_attn:
-                        obs_features = torch.cat([image_features, image_features_second_view, force_feature, language_features, nagent_pos], dim=-1)
+                        if segment:
+                            obs_features = torch.cat([image_features, image_features_second_view, force_feature, language_features, nagent_pos], dim=-1)
+                        else:
+                            obs_features = torch.cat([image_features, image_features_second_view, force_feature, nagent_pos], dim=-1)
                     elif not force_mod and single_view:
                         obs_features = torch.cat([image_features, nagent_pos], dim=-1)
                     elif not force_mod and not single_view:
@@ -272,10 +275,10 @@ def train_Real_Robot(cfg: DictConfig):
             tglobal.set_postfix(loss=avg_loss)
             
             # Save checkpoint every 10 epochs or at the end of training
-            if epoch_idx >= 400 or (epoch_idx+1) == 1:
-                if (epoch_idx + 1) % 20 == 0 or (epoch_idx + 1) == end_epoch or (epoch_idx +1) == 1:
+            if epoch_idx >= 1000 or (epoch_idx+1) == 1:
+                if (epoch_idx + 1) % 50 == 0 or (epoch_idx + 1) == end_epoch or (epoch_idx +1) == 1:
                     # Save only the state_dict of the model, including relevant submodules
-                    torch.save(diffusion.nets.state_dict(),  os.path.join(checkpoint_dir, f'{cfg.name}_{data_name}_{epoch_idx+1}_new_data_USB.pth'))
+                    torch.save(diffusion.nets.state_dict(),  os.path.join(checkpoint_dir, f'{cfg.name}_{data_name}_{epoch_idx+1}_new_data_100.pth'))
     # Plot the loss after training is complete
     plt.figure(figsize=(10, 6))
     plt.plot(range(1, end_epoch + 1), epoch_losses, marker='o', label='Training Loss')
