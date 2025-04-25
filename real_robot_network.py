@@ -573,6 +573,7 @@ class DiffusionPolicy_Real:
 
         if not single_view:
             vision_encoder2 = train_utils().get_resnet('resnet18')
+            vision_encoder2 = train_utils().get_resnet('resnet18')
             vision_encoder2 = train_utils().replace_bn_with_gn(vision_encoder2)
         if force_encode:
             if encoder == "viT":
@@ -602,11 +603,11 @@ class DiffusionPolicy_Real:
             if encoder == "resnet":
                 if segment:
                     print("resnet WITH film")
-                    vision_encoder = train_utils().get_resnet('resnet34')
+                    vision_encoder = train_utils().get_resnet('resnet18')
                     vision_encoder = train_utils().replace_bn_with_gn(vision_encoder)
 
                 else:
-                    print("resnet18")
+                    print("resnet")
                     vision_encoder = train_utils().get_resnet('resnet18')
                     vision_encoder = train_utils().replace_bn_with_gn(vision_encoder)
 

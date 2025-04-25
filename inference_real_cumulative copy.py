@@ -44,6 +44,9 @@ from mpl_toolkits.mplot3d import Axes3D
 import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
+import imageio
+
+BASE_SAVE_DIR = "/home/lm-2023/jeon_team_ws/lbr-stack/src/data_collection/data_collection/logs"
 
 def convert_6d_to_rotation_matrix(r1, r2):
     """Convert 6D rotation representation to a 3x3 rotation matrix."""
@@ -366,8 +369,16 @@ class EvaluateRealRobot:
     # construct ResNet18 encoder
     # if you have multiple camera views, use seperate encoder weights for each view.
     def __init__(self, max_steps, encoder = "resnet", action_def = "delta", force_mod= False, single_view = False, force_encoder = "Linear", force_encode = False, cross_attn = False, hybrid = False, segment = False):
-        self.csv_file_path = self.create_unique_csv_path()
+        self.save_folder = self.create_unique_log_folder(BASE_SAVE_DIR)
+        self.csv_file_path = self.create_unique_csv_path(self.save_folder)
         self.setup_csv_file()
+        self.image_counter = 0  # Initialize counter
+
+# Create subfolders inside the run folder
+        self.image_folder_A = os.path.join(self.save_folder, "image_A")
+        self.image_folder_B = os.path.join(self.save_folder, "image_B")
+        os.makedirs(self.image_folder_A, exist_ok=True)
+        os.makedirs(self.image_folder_B, exist_ok=True)
         print(f"force_encoder: {force_encoder}")
         diffusion = DiffusionPolicy_Real(train=False, 
                                         encoder = encoder, 
@@ -390,11 +401,8 @@ class EvaluateRealRobot:
         pipeline_B = rs.pipeline()
         pipeline_A = rs.pipeline()
 
-
-
         camera_context = rs.context()
         camera_devices = camera_context.query_devices()
-
         self.diffusion = diffusion
         self.force_encode = force_encode
         self.cross_attn = cross_attn
@@ -407,7 +415,7 @@ class EvaluateRealRobot:
                 # Configure Camera A
                 config_A = rs.config()
                 config_A.enable_device(serial_A)
-                config_A.enable_stream(rs.stream.color, 640, 480, rs.format.rgb8, 15)
+                config_A.enable_stream(rs.stream.color, 640, 480, rs.format.rgb8, 30)
                 align_A = rs.align(rs.stream.color)
 
         else:
@@ -420,7 +428,7 @@ class EvaluateRealRobot:
         # Configure Camera B
         config_B = rs.config()
         config_B.enable_device(serial_B)
-        config_B.enable_stream(rs.stream.color, 640, 480, rs.format.rgb8, 15)
+        config_B.enable_stream(rs.stream.color, 640, 480, rs.format.rgb8, 30)
 
         # Start pipelines
         align_B = rs.align(rs.stream.color)
@@ -453,45 +461,53 @@ class EvaluateRealRobot:
 
         self.encoder = encoder
         self.action_def = action_def
-        time.sleep(3)
+        time.sleep(4)
         self.force_mod = force_mod
         self.single_view = single_view
         self.hybrid = hybrid
         self.robotiq_gripper = ControlRobotiq()
 
         obs = self.get_observation()
-        agent_pos_repeated = [obs['agent_pos']]*diffusion.action_horizon
-        obs['agent_pos'] = [item for sublist in agent_pos_repeated for item in sublist]
-
          # keep a queue of last 2 steps of observations
         obs_deque = collections.deque(
             [obs] * diffusion.obs_horizon, maxlen=diffusion.obs_horizon)
 
         self.obs_deque = obs_deque
 
-    def create_unique_csv_path(self):
-        """Generate a unique CSV file path with a timestamp."""
+
+    def create_unique_log_folder(self, base_dir):
+        os.makedirs(base_dir, exist_ok=True)
+        existing_dirs = [d for d in os.listdir(base_dir) if os.path.isdir(os.path.join(base_dir, d)) and d.startswith("run_")]
+        run_numbers = [int(d.split("_")[1]) for d in existing_dirs if d.split("_")[1].isdigit()]
+        next_run_number = max(run_numbers) + 1 if run_numbers else 1
+        new_folder = os.path.join(base_dir, f"run_{next_run_number}")
+        os.makedirs(new_folder)
+        return new_folder
+
+    def create_unique_csv_path(self, folder_path):
+        """Generate a CSV file path inside the provided folder."""
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         filename = f"inference_{timestamp}.csv"
-        directory = "/home/lm-2023/jeon_team_ws/playback_pose/src/data_collection/data_collection"
-        return os.path.join(directory, filename)
+        return os.path.join(folder_path, filename)
+
     
     def setup_csv_file(self):
         """Set up the CSV file with headers if it does not already exist."""
         if not os.path.isfile(self.csv_file_path):
             with open(self.csv_file_path, mode='w', newline='') as csv_file:
                 writer = csv.writer(csv_file)
-                writer.writerow(['fx', 'fy', 'fz'])  # Write header if new file
+                writer.writerow(['x', 'y', 'z','rot_6d_1', 'rot_6d_2', 'rot_6d_3', 'rot_6d_4', 'rot_6d_5','rot_6d_6','gripper_position','force_x', 'force_y', 'force_z','torque_x', 'torque_y', 'torque_z'])  # Write header if new file
 
-    def save_agent_pos_to_csv(self, force_torque_data):
+    def save_agent_pos_to_csv(self, position, rot6d, gripper_pos, force_torque_data):
         """
         Save agent position data to a CSV file.
 
         :param agent_pos: List or array containing the agent's position and rotation (e.g., [x, y, z, qx, qy, qz, qw])
         """
+        row = list(position) + list(rot6d) + [float(gripper_pos)] + list(force_torque_data)
         with open(self.csv_file_path, mode='a', newline='') as csv_file:
             writer = csv.writer(csv_file)
-            writer.writerow(force_torque_data)
+            writer.writerow(row)
 
 
 
@@ -574,20 +590,16 @@ class EvaluateRealRobot:
             cropped_image_B = cropped_image_B[:, start_y:start_y + crop_again_height, start_x:start_x + crop_again_width]
             cropped_image_B = np.transpose(cropped_image_B, (1,2,0))
 
+            image_B_rgb = cv2.cvtColor(cropped_image_B, cv2.COLOR_BGR2RGB)
             image_B_rgb = cv2.resize(image_B_rgb, (98, 98))
         else:    
-            frames_A = pipeline_A.poll_for_frames()
-            frames_B = pipeline_B.poll_for_frames()
-
-            if not frames_A or not frames_B:
-                print("Skipping this Frame")
-                return None  # No new frame yet
-
+            frames_A = pipeline_A.wait_for_frames()
             aligned_frames_A = align_A.process(frames_A)
             color_frame_A = aligned_frames_A.get_color_frame()
             color_image_A = np.asanyarray(color_frame_A.get_data())
             # color_image_A.astype(np.float32)
 
+            frames_B = pipeline_B.wait_for_frames()
             aligned_frames_B = align_B.process(frames_B)
             color_frame_B = aligned_frames_B.get_color_frame()
             color_image_B = np.asanyarray(color_frame_B.get_data())
@@ -664,17 +676,34 @@ class EvaluateRealRobot:
             
         image_A_rgb = image_A
         image_B_rgb = cropped_image_B
+        img_name_A = f"camera_A_{self.image_counter}.png"
+        img_name_B = f"camera_B_{self.image_counter}.png"
+
+        imageio.imwrite(os.path.join(self.image_folder_A, img_name_A), image_A_rgb)
+        imageio.imwrite(os.path.join(self.image_folder_B, img_name_B), image_B_rgb)
+
+        print(f"Saved images: {img_name_A}, {img_name_B}")
+        self.image_counter += 1
+
          ### Visualizing purposes
         # import nodes
         # print(f'current agent position, {agent_pos}')
-        self.save_agent_pos_to_csv(force_torque_data)
         agent_position = agent_pos[:3]
         agent_rotation = agent_pos[3:]
         # Gripper Position Query
         gripper_pos = self.robotiq_gripper.get_gripper_current_pose()
+        force_data = [
+                EE_Pose_Node.force_torque_data.force.x,
+                EE_Pose_Node.force_torque_data.force.y,
+                EE_Pose_Node.force_torque_data.force.z,
+                EE_Pose_Node.force_torque_data.torque.x,
+                EE_Pose_Node.force_torque_data.torque.y,
+                EE_Pose_Node.force_torque_data.torque.z,
+            ]
         rot_m_agent = quat_to_rot_m(agent_rotation)
         rot_6d = mat_to_rot6d(rot_m_agent)
         agent_pos_10d = np.hstack((agent_position, rot_6d, gripper_pos))
+        self.save_agent_pos_to_csv(agent_position, rot_6d, gripper_pos, force_data)
 
         # # import matplotlib.pyplot as plt
         # plt.imshow(image_A_rgb)
@@ -719,8 +748,6 @@ class EvaluateRealRobot:
         ### Stepping function to execute action with robot
         EE_Pose_Node = EndEffectorPoseNode("exec")
         kuka_execution = KukaMotionPlanning(steps)
-        prev_imgA = None
-        prev_imgB = None
         waypoint_list = []
         obs_list = []
         for i, pose in enumerate(end_effector_pos):
@@ -745,7 +772,7 @@ class EvaluateRealRobot:
                 target_pose.orientation.z = next_rot[2]
                 target_pose.orientation.w = next_rot[3]
             else:
-                # print(f'action command {end_effector_pos} absolute')
+                print(f'action command {end_effector_pos} absolute')
                 # Create Pose message for IK
                 target_pose = Pose()
                 target_pose.position.x = position[0]
@@ -760,11 +787,11 @@ class EvaluateRealRobot:
 
 
             joint_state = EE_Pose_Node.get_ik(target_pose)
-            while joint_state is None:
+            if joint_state is None:
                 joint_state = EE_Pose_Node.get_ik(target_pose)
 
             waypoint_list.append(joint_state)
-        agent_pos = []
+
         if joint_state is None:
             EE_Pose_Node.get_logger().warn("Failed to get IK solution")
         else: 
@@ -773,28 +800,24 @@ class EvaluateRealRobot:
             # trajectory_msg = JointTrajectory()
             kuka_execution.send_goal(waypoint_list)
             for position_idx in range(len(end_effector_pos)):
-                # obs_time = time.time()
+                obs_time = time.time()
                 obs = self.get_observation()
-                if obs is None:
-                    continue
                 obs_list.append(obs)
-
                 current_gripper_pos = self.robotiq_gripper.get_gripper_current_pose()
-                
                 # print(f"gripper current pose {current_gripper_pos}")
                 if gripper_action[position_idx] < 0:
                     gripper_action[position_idx] = 0.0
                 print(gripper_action)
                 delta_gripper = abs(current_gripper_pos - gripper_action[position_idx])
                 # print(f'delta gripper : {delta_gripper}')
-                scaled_command = current_gripper_pos + float(gripper_action[position_idx]*0.9)
-                # Actively drain the camera buffer
-
+                scaled_command = float(gripper_action[position_idx]*2.0)
                 if scaled_command > 0.8:
                     scaled_command = 0.8
                 self.robotiq_gripper.send_gripper_command(scaled_command)
-                if position_idx == (len(end_effector_pos)-1):
+                if position_idx == len(end_effector_pos)-1:
                     time.sleep(0.0)
+                elif position_idx == len(end_effector_pos)-2:
+                    time.sleep(0.01)
                 else:
                     time.sleep(0.18)
                 # obs_end_time = time.time()
@@ -821,9 +844,8 @@ class EvaluateRealRobot:
             # kuka_execution._send_goal_future = kuka_execution._action_client.send_goal_async(goal_msg, feedback_callback=kuka_execution.feedback_callback)
             # kuka_execution._send_goal_future.add_done_callback(kuka_execution.goal_response_callback)
 
-            # construct new observationq
-            
-            
+            # construct new observationqqqqqqq
+
             return obs_list
     
         # the final arch has 2 partsqqq
@@ -832,7 +854,7 @@ class EvaluateRealRobot:
 
         load_pretrained = True
         if load_pretrained:
-            ckpt_path = "/home/lm-2023/jeon_team_ws/lbr-stack/src/DP_cable_disconnection/checkpoints/resnet_force_mod_no_encode_hybrid_segment_CASE_Terminal_100.z_2000_new_data_100.pth"
+            ckpt_path = "/home/lm-2023/jeon_team_ws/lbr-stack/src/DP_cable_disconnection/checkpoints/resnet_force_mod_no_encode_hybrid_segment_CASE_DSUB_Seperate_new100.z_2000_new_data_100.pth"
             #   if not os.path.isfile(ckpt_path):qq
             #       id = "1XKpfNSlwYMGqaF5CncoFaLKCDTWoLAHf1&confirm=tn"q
             #       gdown.download(id=id, output=ckpt_path, quiet=False)    
@@ -872,7 +894,7 @@ class EvaluateRealRobot:
         
         segment_mapping = {0: "Approach", 1: "Grasp", 2: "Unlock", 3: "Pull", 4: "Ungrasp"}
         object_mapping = {0: "USB", 1: "Dsub", 2: "Ethernet", 3: "Bnc", 4: "Terminal Block"}
-        with open('/home/lm-2023/jeon_team_ws/lbr-stack/src/DP_cable_disconnection/stats_CASE_Terminal_100.z_resnet_delta_with_force.json', 'r') as f:
+        with open('/home/lm-2023/jeon_team_ws/lbr-stack/src/DP_cable_disconnection/stats_CASE_DSUB_Seperate_new100.z_resnet_delta_with_force.json', 'r') as f:
             stats = json.load(f)
             if force_mod:
                 stats['agent_pos']['min'] = np.array(stats['agent_pos']['min'], dtype=np.float32)
@@ -1040,7 +1062,6 @@ class EvaluateRealRobot:
                 naction = naction[0]
                 action_pred = data_utils.unnormalize_data(naction[:,:3], stats=stats['action'])
                 gripper_pred = data_utils.unnormalize_gripper_data(naction[:,-1], stats=stats['action_gripper']).reshape(-1,1)
-                gripper_pred = data_utils.unnormalize_gripper_data(naction[:,-1], stats=stats['action_gripper']).reshape(-1,1)
                 action_pred = np.hstack((action_pred, naction[:,3:9], gripper_pred))
                 
                 # only take action_horizon number of actions
@@ -1051,7 +1072,7 @@ class EvaluateRealRobot:
                 robot_action = [sublist[:-1] for sublist in action]
                 robot_action = delta_to_cumulative(robot_action)
                 gripper_action = [sublist[-1] for sublist in action]
-                # (action_horizon, action_dim)
+            # (action_horizon, action_dim)
 
                 # execute action_horizon number of steps
                 # without replanning
@@ -1061,23 +1082,13 @@ class EvaluateRealRobot:
                 duratino_inference = inference_end - inference_start
                 print(f"Duration : {duratino_inference}")
                 obs = self.execute_action(robot_action, gripper_action, len(action))
-                # self.robotiq_gripper.send_gripper_command(action_pred[start:end+8][-1][-1])
-                steps+= len(action)
+                steps+=len(action)
 
-                agent_pos_list = []          # collect all agent_pos values
-
-                for _obs in obs:
-                    agent_pos_list.append(_obs['agent_pos'])  # keep full agent_pos history
-
-                # Convert to array: shape (N, 10)
-                agent_pos_array = np.stack(agent_pos_list)
-                agent_pos_reshaped = np.stack([agent_pos_array.flatten()] * 2)
 
                 # save observations
                 obs_deque.extend(obs)
-                for idx, obs in enumerate(obs_deque):
-                    obs['agent_pos'] = agent_pos_reshaped[idx]
-
+                # for i, img in enumerate(obs_deque):
+                #     image_B = np.transpose(img["image_B"], (1, 2, 0))
 
                 #     plt.imshow(image_B)
                 #     plt.show()
@@ -1144,7 +1155,7 @@ def main(cfg: DictConfig):
     rclpy.init()
     try:  
 
-        max_steps = 400
+        max_steps = 200
         # Evaluate Real Robot Environment
         print(f"inference on {cfg.name}")
         eval_real_robot = EvaluateRealRobot(max_steps= max_steps,

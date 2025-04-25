@@ -95,7 +95,7 @@ class data_utils:
     
     def normalize_gripper_data(data, stats):
         # nomalize to [0,1]
-        ndata = (data - stats['min']) / (stats['max'] - stats['min']+1e-7)
+        ndata = (data - stats['min']) / (stats['max'] - stats['min'])
         return ndata
 
     def unnormalize_gripper_data(ndata, stats):

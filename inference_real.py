@@ -395,6 +395,7 @@ class EvaluateRealRobot:
         self.force_encode = force_encode
         self.cross_attn = cross_attn
         if not single_view:
+            
             if len(camera_devices) < 2:
                 pipeline_A = rs.pipeline()
 

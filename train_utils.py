@@ -137,7 +137,7 @@ class train_utils:
         resnet.fc = torch.nn.Identity()  # Remove classification head
         return ResNetWithFiLM(resnet, feature_dim)
     
-    def get_resnet(self, name, weights=None, fine_tune = True, **kwargs):
+    def get_resnet(self, name, weights= None, fine_tune = True, **kwargs):
         """
         name: resnet18, resnet34, resnet50
         weights: "IMAGENET1K_V1", "r3m"
