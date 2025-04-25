@@ -531,7 +531,7 @@ def get_filename(input_string):
         return ""
 
 
-dataset_path = "/home/jeonkang/jeon_ws/DP_cable_disconnection/CASE_DSUB_Seperate_new100.zarr.zip"
+dataset_path = "/home/jeonkang/jeon_ws/DP_cable_disconnection/CASE_Terminal_100.zarr.zip"
 # dataset_path = "/home/lm-2023/jeon_team_ws/lbr-stack/src/DP_cable_disconnection/nist_rotating_with_segment.zarr.zip"
 #@markdown ### **Network Demo**
 class DiffusionPolicy_Real:     
@@ -549,16 +549,16 @@ class DiffusionPolicy_Real:
         # action dimension should also correspond with the state dimension (x,y,z, x, y, z, w)
         action_dim = 10
         # parameters
-        pred_horizon = 48
+        pred_horizon = 16
         obs_horizon = 2
-        action_horizon = 24
-        lowdim_obs_dim = 10
+        action_horizon = 8
+        lowdim_obs_dim = 10*8 # 8 because I want to flatten whole trajectorial information
         if segment:
             lowdim_obs_dim += 512
         #|o|o|                             observations: 2
         #| |a|a|a|a|a|a|a|a|               actions executed: 8
         #|p|p|p|p|p|p|p|p|p|p|p|p|p|p|p|p| actions predicted: 16
-        batch_size = 48
+        batch_size = 49
         Transformer_bool = None
         modality = "without_force"
         view = "dual_view"
