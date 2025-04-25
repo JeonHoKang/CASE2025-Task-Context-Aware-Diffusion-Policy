@@ -357,9 +357,9 @@ class RealRobotDataSet(torch.utils.data.Dataset):
             nsample['image'] = nsample['image'][:self.obs_horizon, :]
             if not self.single_view:
                 nsample['image2'] = nsample['image2'][:self.obs_horizon, :]
-
+        trajectory_len = int(self.action_horizon)
         # nsample['image'] = nsample['image'][:self.obs_horizon,:]
-        nsample['agent_pos'] = nsample['agent_pos'].reshape(2,-1)
+        nsample['agent_pos'] = nsample['agent_pos'][:trajectory_len, :].reshape(2,-1)
         
         if self.force_mod:
             # discard unused observations
