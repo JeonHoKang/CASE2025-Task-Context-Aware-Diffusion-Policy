@@ -407,7 +407,7 @@ class EvaluateRealRobot:
                 # Configure Camera A
                 config_A = rs.config()
                 config_A.enable_device(serial_A)
-                config_A.enable_stream(rs.stream.color, 640, 480, rs.format.rgb8, 15)
+                config_A.enable_stream(rs.stream.color, 640, 480, rs.format.rgb8, 30)
                 align_A = rs.align(rs.stream.color)
 
         else:
@@ -420,7 +420,7 @@ class EvaluateRealRobot:
         # Configure Camera B
         config_B = rs.config()
         config_B.enable_device(serial_B)
-        config_B.enable_stream(rs.stream.color, 640, 480, rs.format.rgb8, 15)
+        config_B.enable_stream(rs.stream.color, 640, 480, rs.format.rgb8, 30)
 
         # Start pipelines
         align_B = rs.align(rs.stream.color)
