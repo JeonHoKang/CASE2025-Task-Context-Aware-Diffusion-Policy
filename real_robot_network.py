@@ -531,8 +531,7 @@ def get_filename(input_string):
         return ""
 
 
-dataset_path = "/home/jeonkang/jeon_ws/DP_cable_disconnection/CASE_Terminal_100.zarr.zip"
-# dataset_path = "/home/lm-2023/jeon_team_ws/lbr-stack/src/DP_cable_disconnection/nist_rotating_with_segment.zarr.zip"
+dataset_path = "/home/jeonkang/jeon_ws/DP_cable_disconnection/DSUB_delta_100_new.zarr.zip"
 #@markdown ### **Network Demo**
 class DiffusionPolicy_Real:     
     def __init__(self,

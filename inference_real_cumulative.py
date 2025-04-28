@@ -1040,7 +1040,6 @@ class EvaluateRealRobot:
                 naction = naction[0]
                 action_pred = data_utils.unnormalize_data(naction[:,:3], stats=stats['action'])
                 gripper_pred = data_utils.unnormalize_gripper_data(naction[:,-1], stats=stats['action_gripper']).reshape(-1,1)
-                gripper_pred = data_utils.unnormalize_gripper_data(naction[:,-1], stats=stats['action_gripper']).reshape(-1,1)
                 action_pred = np.hstack((action_pred, naction[:,3:9], gripper_pred))
                 
                 # only take action_horizon number of actions
@@ -1062,22 +1061,10 @@ class EvaluateRealRobot:
                 print(f"Duration : {duratino_inference}")
                 obs = self.execute_action(robot_action, gripper_action, len(action))
                 # self.robotiq_gripper.send_gripper_command(action_pred[start:end+8][-1][-1])
-                steps+= len(action)
-
-                agent_pos_list = []          # collect all agent_pos values
-
-                for _obs in obs:
-                    agent_pos_list.append(_obs['agent_pos'])  # keep full agent_pos history
-
-                # Convert to array: shape (N, 10)
-                agent_pos_array = np.stack(agent_pos_list)
-                agent_pos_reshaped = np.stack([agent_pos_array.flatten()] * 2)
+   
 
                 # save observations
                 obs_deque.extend(obs)
-                for idx, obs in enumerate(obs_deque):
-                    obs['agent_pos'] = agent_pos_reshaped[idx]
-
 
                 #     plt.imshow(image_B)
                 #     plt.show()
