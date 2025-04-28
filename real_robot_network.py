@@ -552,7 +552,7 @@ class DiffusionPolicy_Real:
         pred_horizon = 16
         obs_horizon = 2
         action_horizon = 8
-        lowdim_obs_dim = 10*8 # 8 because I want to flatten whole trajectorial information
+        lowdim_obs_dim = 10 # 8 because I want to flatten whole trajectorial information
         if segment:
             lowdim_obs_dim += 512
         #|o|o|                             observations: 2
