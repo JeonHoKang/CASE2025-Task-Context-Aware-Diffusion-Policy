@@ -460,8 +460,6 @@ class EvaluateRealRobot:
         self.robotiq_gripper = ControlRobotiq()
 
         obs = self.get_observation()
-        agent_pos_repeated = [obs['agent_pos']]*diffusion.action_horizon
-        obs['agent_pos'] = [item for sublist in agent_pos_repeated for item in sublist]
 
          # keep a queue of last 2 steps of observations
         obs_deque = collections.deque(
