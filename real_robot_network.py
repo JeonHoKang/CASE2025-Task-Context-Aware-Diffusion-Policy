@@ -531,7 +531,7 @@ def get_filename(input_string):
         return ""
 
 
-dataset_path = "/home/jeonkang/jeon_ws/DP_cable_disconnection/DSUB_delta_100_new.zarr.zip"
+dataset_path = "DSUB_delta_grip_100_new.zarr.zip"
 #@markdown ### **Network Demo**
 class DiffusionPolicy_Real:     
     def __init__(self,

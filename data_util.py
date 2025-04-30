@@ -337,7 +337,6 @@ class RealRobotDataSet(torch.utils.data.Dataset):
             sample_start_idx=sample_start_idx,
             sample_end_idx=sample_end_idx
         )
-        gap = 5  # for example
         # Apply augmentation to images only
         if self.augment:
             # Convert image to PIL format for augmentation if needed
@@ -353,30 +352,30 @@ class RealRobotDataSet(torch.utils.data.Dataset):
                 nsample['image2'] = torch.stack(img_augmented2)
                 nsample['image2'] = np.array(nsample['image2'])
         else:
-            # Convert images to tensor without augmentation
-            nsample['image'] = nsample['image'][[0, gap], :]
+            # Convert images to tensor without augmentatio
+            nsample['image'] = nsample['image'][:self.obs_horizon, :]
 
             if not self.single_view:
-                nsample['image2'] = nsample['image2'][[0, gap], :]
+                nsample['image2'] = nsample['image2'][:self.obs_horizon, :]
 
         # nsample['image'] = nsample['image'][:self.obs_horizon,:]
-        nsample['agent_pos'] = nsample['agent_pos'][[0, gap], :]
+        nsample['agent_pos'] = nsample['agent_pos'][:self.obs_horizon, :]
 
         
         if self.force_mod:
             # discard unused observations
             if self.augment:
                 noise_std = 0.00005
-                force_arr = nsample['force'][[0, gap], :]
+                force_arr = nsample['force'][:self.obs_horizon, :]
                 scaling_factors = np.random.uniform(0.8, 1.2)
                 force_augmented = force_arr * scaling_factors + np.random.normal(0, noise_std, size=force_arr.shape)
                 nsample['force'] = force_augmented.astype(np.float32)
             else:
                 # nsample['force'] = nsample['force'][:self.obs_horizon,:]
-                nsample['force'] = nsample['force'][[0, gap], :]
+                nsample['force'] = nsample['force'][:self.obs_horizon, :]
 
         if self.segment:
-            nsample['language_command'] = nsample['language_command'][[0, gap], :] # Repeat for each timestep
+            nsample['language_command'] = nsample['language_command'][:self.obs_horizon, :] # Repeat for each timestep
         # if not self.single_view:
         #     # discard unused observations
         #     nsample['image2'] = nsample['image2'][:self.obs_horizon,:]
